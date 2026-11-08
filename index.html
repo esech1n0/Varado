@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0b1230" />
+    <meta name="manus-game-preview-resource" content="wdp_e4f93a05e56e5c9bdecf2224" />
+    <title>Varado</title>
+    <meta name="description" content="Astronauta aislado, un planeta infestado por aliens estilo Among Us y una sola nave para escapar. Aventura 3D de supervivencia con estética LEGO." />
+    <link rel="icon" type="image/png" href="/assets/share/favicon.png" />
+    <link rel="preload" href="./fonts/Bangers-Regular.ttf" as="font" type="font/ttf" crossorigin />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud" class="hidden">
+      <div id="hp">
+        <div class="lbl">VIDA</div>
+        <div class="bar"><div id="hpfill"></div><div id="hpnum">100</div></div>
+      </div>
+      <div id="stam">
+        <div class="lbl">ESTAMINA</div>
+        <div class="bar"><div id="stfill"></div></div>
+      </div>
+      <div id="lego" title="Piezas curiosas de LEGO"><i class="brick"></i><b id="legoN">0</b><span>/</span><span id="legoT">14</span></div>
+      <div id="objective"></div>
+      <div id="boss" class="hidden"><div class="nm" id="bossName"></div><div class="bar"><div id="bossFill"></div></div></div>
+      <canvas id="radar" width="168" height="168"></canvas>
+      <div id="weapons"></div>
+      <div id="cross"></div>
+      <div id="scope" class="hidden"><div class="reticle"></div></div>
+      <div id="prompt"></div>
+      <div id="caption"></div>
+      <div id="radio"><span class="tag">RADIO</span><span id="radioText"></span></div>
+      <div id="speed"></div>
+      <div id="hurt"></div>
+      <div id="fade"></div>
+      <button id="mute" class="mini" aria-label="Silenciar">SONIDO</button>
+    </div>
+
+    <div id="touch" class="hidden">
+      <div id="stick"><div id="knob"></div></div>
+      <button class="tbtn" id="t-fire">FUEGO</button>
+      <button class="tbtn" id="t-use">E</button>
+      <button class="tbtn" id="t-swap">ARMA</button>
+      <button class="tbtn" id="t-run">CORRER</button>
+      <button class="tbtn" id="t-dash">DASH</button>
+      <button class="tbtn" id="t-grenade">GRANADA</button>
+      <button class="tbtn" id="t-zoom">MIRA</button>
+    </div>
+
+    <div class="ovl" id="ovl-start">
+      <div class="panel">
+        <div class="kicker">Misión de supervivencia</div>
+        <h1>VARADO</h1>
+        <p class="story">
+          Eres un astronauta aislado en un planeta de arena infestado de impostores. La estación no responde:
+          <b>no hay conexión</b>. Tu única salida es encontrar una nave de escape… con combustible justo para llegar al planeta más cercano.
+        </p>
+        <div class="controls">
+          <span><kbd>W A S D</kbd> mover / conducir</span>
+          <span><kbd>Ratón</kbd> apuntar</span>
+          <span><kbd>Clic</kbd> / <kbd>Espacio</kbd> disparar</span>
+          <span><kbd>E</kbd> subir / bajar del buggy</span>
+          <span><kbd>1 2 3 4</kbd> / <kbd>Rueda</kbd> cambiar arma</span>
+          <span><kbd>Z</kbd> mira francotirador</span>
+          <span><kbd>Shift</kbd> correr</span>
+          <span><kbd>C</kbd> dash</span>
+          <span><kbd>G</kbd> lanzar granada de plasma</span>
+          <span><kbd>← →</kbd> girar cámara</span>
+          <span><kbd>Esc</kbd> pausa</span>
+        </div>
+        <button class="btn primary" id="btn-play" disabled>Cargando modelos…</button>
+        <div class="hint" id="load-hint">Preparando el planeta…</div>
+      </div>
+    </div>
+
+    <div class="ovl hidden" id="ovl-pause">
+      <div class="panel small">
+        <h2>PAUSA</h2>
+        <p class="story">Tómate un respiro. Los impostores esperan afuera.</p>
+        <div class="menu-btns">
+          <button class="btn primary" id="btn-resume">Reanudar</button>
+          <button class="btn" id="btn-settings">Configuración</button>
+          <button class="btn" id="btn-cp">Reiniciar al checkpoint</button>
+          <button class="btn" id="btn-restart">Reiniciar nivel</button>
+          <button class="btn eval" id="btn-quit-eval">Salir y Evaluar juego</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ovl hidden" id="ovl-settings">
+      <div class="panel small">
+        <h2>CONFIGURACIÓN</h2>
+        <div class="settings-list">
+          <div class="setting-row">
+            <label for="vol-master">Volumen general</label>
+            <div class="setting-ctrl">
+              <input type="range" id="vol-master" min="0" max="100" step="1" value="100" />
+              <span class="setting-val" id="vol-master-val">100</span>
+            </div>
+          </div>
+          <div class="setting-row">
+            <label for="vol-sfx">Volumen de efectos</label>
+            <div class="setting-ctrl">
+              <input type="range" id="vol-sfx" min="0" max="100" step="1" value="100" />
+              <span class="setting-val" id="vol-sfx-val">100</span>
+            </div>
+          </div>
+          <div class="setting-row">
+            <label for="sens-range">Sensibilidad</label>
+            <div class="setting-ctrl">
+              <input type="range" id="sens-range" min="0.1" max="10" step="0.1" value="1" />
+              <input type="number" id="sens-input" class="sens-box" min="0.1" max="10" step="0.1" value="1" aria-label="Sensibilidad por teclado" />
+            </div>
+          </div>
+        </div>
+        <div class="menu-btns">
+          <button class="btn primary" id="btn-settings-back">Volver</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ovl hidden" id="ovl-dead">
+      <div class="panel danger">
+        <h2 id="dead-title">¡CAÍSTE!</h2>
+        <p class="story" id="dead-text">La horda te alcanzó.</p>
+        <a class="btn eval" id="eval-dead" href="https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit" target="_blank" rel="noopener noreferrer">Evaluar el Juego</a>
+        <div class="stats" id="dead-stats"></div>
+        <button class="btn primary" id="btn-retry">Reintentar desde la baliza</button>
+      </div>
+    </div>
+
+    <div class="ovl hidden" id="ovl-end">
+      <div class="panel win">
+        <h2>¡ESCAPASTE!</h2>
+        <p class="story">
+          La nave despega entre chispas y polvo. El combustible apenas alcanza para llegar al planeta más cercano… pero estás vivo.
+          La estación seguirá sin responder, al menos por ahora.
+        </p>
+        <a class="btn eval" id="eval-end" href="https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit" target="_blank" rel="noopener noreferrer">Evaluar el Juego</a>
+        <div class="stats" id="end-stats"></div>
+        <button class="btn primary" id="btn-again">Jugar de nuevo</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
