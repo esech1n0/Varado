@@ -2919,58 +2919,58 @@ export class Game {
       } else if (p.weapon === 'pistol') {
         // Pistola a UNA mano (derecha); brazo izquierdo relajado al costado con balanceo natural
         rig.weaponMount.visible = true
-        rig.torso.rotation.set(0, lerp(0, 0.06, stance), 0)
-        rig.headGroup.rotation.set(0, lerp(0, -0.06, stance), 0)
+        rig.torso.rotation.set(0, lerp(0, -0.06, stance), 0)
+        rig.headGroup.rotation.set(0, lerp(0, 0.06, stance), 0)
 
         const bobY = (1 - stance) * Math.sin(p.walk * 2) * 0.3 * p.moving
         rig.weaponMount.position.set(
-          lerp(12, 18.5, stance),
-          lerp(22.5, 28.5, stance) + bobY,
-          lerp(9.5, 8.5, stance)
+          lerp(8.5, 13.8, stance),
+          lerp(21.0, 28.5, stance) + bobY,
+          lerp(9.5, 10.0, stance)
         )
         rig.weaponMount.rotation.set(
           lerp(0, 0, stance),
-          lerp(0.05, -0.06, stance),
-          lerp(-0.66, 0, stance) + kick
+          lerp(0.05, 0, stance),
+          lerp(-0.65, 0, stance) + kick
         )
 
         rig.armR.rotation.set(
-          lerp(0, 0, stance),
-          lerp(0.06, -0.1, stance),
-          lerp(-0.66, 0.02, stance) + (1 - stance) * sw * 0.15 + kick * 0.7
+          lerp(0.08, 0, stance),
+          lerp(0.12, 0.04, stance),
+          lerp(-0.72, 0.02, stance) + (1 - stance) * sw * 0.15 + kick * 0.7
         )
-        rig.armL.rotation.set(0, 0, -1.25 - sw * (0.6 - stance * 0.3))
+        rig.armL.rotation.set(0, 0, -1.30 - sw * (0.6 - stance * 0.3))
       } else {
         // Armas largas a DOS manos (rifle, escopeta, francotirador):
         // Reposo: Guardia baja táctica a dos manos (cruzada al pecho a ~35° hacia abajo)
-        // Disparo: Postura táctica de tiro a dos manos con giro moderado del cuerpo (~22°)
+        // Disparo: Postura táctica de tiro a dos manos con giro de perfil (~20°) y ambas manos en empuñadura y guardamanos
         rig.weaponMount.visible = true
-        rig.torso.rotation.set(0, lerp(0, 0.38, stance), 0)
-        rig.headGroup.rotation.set(0, lerp(0, -0.38, stance), 0)
+        rig.torso.rotation.set(0, lerp(0, -0.35, stance), 0)
+        rig.headGroup.rotation.set(0, lerp(0, 0.35, stance), 0)
 
         const bobY = (1 - stance) * Math.sin(p.walk * 2) * 0.35 * p.moving
         rig.weaponMount.position.set(
-          lerp(13, 15, stance),
-          lerp(23.5, 28, stance) + bobY,
-          lerp(2, 3, stance)
+          lerp(5.5, 6.5, stance),
+          lerp(24.0, 26.5, stance) + bobY,
+          lerp(-1.0, -1.5, stance)
         )
         rig.weaponMount.rotation.set(
-          lerp(-0.16, 0, stance),
-          lerp(-0.22, -0.38, stance),
-          lerp(-0.58, 0, stance) + kick
+          lerp(-0.25, 0, stance),
+          lerp(0.40, 0.35, stance),
+          lerp(-0.60, 0, stance) + kick
         )
 
-        // Brazo derecho: sostiene la culata y gatillo
+        // Brazo derecho: mano en la empuñadura trasera
         rig.armR.rotation.set(
-          lerp(-0.18, 0.06, stance),
-          lerp(-0.32, -0.46, stance),
-          lerp(-0.48, 0.08, stance) + kick * 0.6
+          lerp(0.39, 0.18, stance),
+          lerp(1.02, 1.05, stance),
+          lerp(-0.69, -0.30, stance) + kick * 0.6
         )
-        // Brazo izquierdo: cruza para sostener el guardamanos delantero
+        // Brazo izquierdo: mano cruzando en el guardamanos delantero
         rig.armL.rotation.set(
-          lerp(0.24, -0.08, stance),
-          lerp(0.46, 0.44, stance),
-          lerp(-0.52, 0.14, stance) + kick * 0.4
+          lerp(-0.26, -0.05, stance),
+          lerp(-0.70, -0.54, stance),
+          lerp(-0.69, -0.17, stance) + kick * 0.4
         )
       }
     }
