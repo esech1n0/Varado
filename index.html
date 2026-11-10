@@ -13,6 +13,7 @@
   <body>
     <canvas id="game"></canvas>
     <canvas id="menu-bg"></canvas>
+    <div id="wake-vignette"></div>
 
     <div id="hud" class="hidden">
       <div id="hp">
@@ -32,12 +33,12 @@
       <div id="cross"></div>
       <div id="scope" class="hidden"><div class="reticle"></div></div>
       <div id="prompt"></div>
+      <div id="control-hint" class="hidden"></div>
       <div id="caption"></div>
       <div id="radio"><span class="tag">TÚ</span><span id="radioText"></span></div>
       <div id="toast"><div class="toast-head">¡LOGRO DESBLOQUEADO!</div><b id="toastTitle"></b><span id="toastDesc"></span></div>
       <div id="hurt"></div>
       <div id="fade"></div>
-      <button id="mute" class="mini" aria-label="Silenciar">SONIDO</button>
     </div>
 
     <div id="touch" class="hidden">
@@ -70,10 +71,10 @@
       <div class="menu-wrap">
         <h2 class="sub">DIFICULTAD</h2>
         <div class="menu-btns diff">
-          <button class="btn diff-btn" data-diff="easy"><span>Fácil</span><small>Menos enemigos, más lentos y con ataques más pausados. +30% de drops.</small></button>
-          <button class="btn diff-btn primary" data-diff="normal"><span>Moderado</span><small>La experiencia base de Varado.</small></button>
-          <button class="btn diff-btn" data-diff="hard"><span>Difícil</span><small>+10% de enemigos, +10% de velocidad, +5% de vida y −10% de drops.</small></button>
-          <button class="btn diff-btn inf" data-diff="infestation"><span>INFESTACIÓN</span><small>+25% de enemigos, mucho más rápidos, +10% de vida y −15% de drops.</small></button>
+          <button class="btn diff-btn" data-diff="easy"><span>Fácil</span><small>Una travesía tranquila para explorar el planeta y dominar los controles sin agobios.</small></button>
+          <button class="btn diff-btn primary" data-diff="normal"><span>Moderado</span><small>El desafío original: supervivencia táctica, reflejos y adrenalina en equilibrio.</small></button>
+          <button class="btn diff-btn" data-diff="hard"><span>Difícil</span><small>Peligro constante. Recursos escasos y enemigos hostiles que no perdonan errores.</small></button>
+          <button class="btn diff-btn inf" data-diff="infestation"><span>INFESTACIÓN</span><small>Mucha suerte.</small></button>
         </div>
         <div class="controls">
           <span><kbd>W A S D</kbd> mover</span>
@@ -150,14 +151,12 @@
             </div>
           </div>
           <div class="setting-row">
-            <label for="quality">Calidad gráfica</label>
-            <div class="setting-ctrl">
-              <select id="quality" class="sel-box">
-                <option value="auto">Automática</option>
-                <option value="high">Alta</option>
-                <option value="medium">Media</option>
-                <option value="low">Baja (equipos modestos)</option>
-              </select>
+            <label>Calidad gráfica</label>
+            <div class="quality-pills" id="quality-pills" role="radiogroup" aria-label="Calidad gráfica">
+              <button type="button" class="q-btn" data-q="auto">Automática</button>
+              <button type="button" class="q-btn" data-q="low">Baja</button>
+              <button type="button" class="q-btn" data-q="medium">Media</button>
+              <button type="button" class="q-btn" data-q="high">Alta</button>
             </div>
           </div>
         </div>

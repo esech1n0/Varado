@@ -1,5 +1,5 @@
 import './styles/main.css'
-import { audioInit, isMuted, setMuted, setMusicMode, setVolume, type VolumeKey } from './game/audio'
+import { audioInit, engineSet, engineStop, setMusicMode, setVolume, type VolumeKey } from './game/audio'
 import { FORM_URL, SETTINGS, saveSettings, type DifficultyId, type Quality } from './game/config'
 import { achievements } from './game/achievements'
 import { Game } from './game/game'
@@ -253,6 +253,7 @@ function showMenuBackground(show: boolean): void {
 function pause(): void {
   if (!started || game.mode !== 'play' || game.paused) return
   game.paused = true
+  engineSet(false, 0)
   inSettings = false
   hud.overlay('settings', false)
   hud.overlay('pause', true)
@@ -380,6 +381,7 @@ $('btn-resume').addEventListener('click', resume)
 
 $('btn-cp').addEventListener('click', () => {
   audioInit()
+  engineStop()
   game.paused = false
   inSettings = false
   hud.overlay('pause', false)
@@ -389,6 +391,7 @@ $('btn-cp').addEventListener('click', () => {
 
 $('btn-restart').addEventListener('click', () => {
   audioInit()
+  engineStop()
   game.paused = false
   inSettings = false
   hud.overlay('pause', false)
@@ -399,6 +402,7 @@ $('btn-restart').addEventListener('click', () => {
 
 $('btn-quit-eval').addEventListener('click', () => {
   window.open(FORM_URL, '_blank', 'noopener,noreferrer')
+  engineStop()
   game.paused = false
   inSettings = false
   started = false
@@ -413,20 +417,17 @@ $('btn-quit-eval').addEventListener('click', () => {
 
 $('btn-retry').addEventListener('click', () => {
   audioInit()
+  engineStop()
   game.respawn()
 })
 
 $('btn-again').addEventListener('click', () => {
   audioInit()
+  engineStop()
   hud.overlay('end', false)
   showMenuBackground(true)
   game.resetRun()
   hud.overlay('start', true)
-})
-
-$('mute').addEventListener('click', () => {
-  setMuted(!isMuted())
-  $('mute').textContent = isMuted() ? 'SILENCIADO' : 'SONIDO'
 })
 
 // ==========================================
@@ -485,17 +486,23 @@ sensInput.addEventListener('input', () => applySensFromInput(false))
 sensInput.addEventListener('change', () => applySensFromInput(true))
 sensInput.addEventListener('blur', () => applySensFromInput(true))
 
-// Selector de calidad gráfica
-const qualitySelect = $<HTMLSelectElement>('quality')
-if (qualitySelect) {
-  qualitySelect.value = SETTINGS.quality
-  qualitySelect.addEventListener('change', () => {
-    const q = qualitySelect.value as Quality
+// Botones de calidad gráfica horizontal
+const qBtns = document.querySelectorAll<HTMLButtonElement>('.q-btn')
+function updateQualityUI(current: Quality): void {
+  qBtns.forEach(b => {
+    b.classList.toggle('active', b.dataset.q === current)
+  })
+}
+updateQualityUI(SETTINGS.quality)
+qBtns.forEach(b => {
+  b.addEventListener('click', () => {
+    const q = (b.dataset.q as Quality) || 'auto'
     SETTINGS.quality = q
+    updateQualityUI(q)
     game.applyQuality(q)
     saveSettings()
   })
-}
+})
 
 // ==========================================
 // Carga de modelos GLB

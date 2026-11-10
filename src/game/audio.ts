@@ -219,8 +219,28 @@ export function engineSet(on: boolean, speed: number): void {
     engine.osc2.frequency.setTargetAtTime(24 + speed * 45, t, 0.08)
     engine.gain.gain.setTargetAtTime(muted ? 0 : 0.035 + speed * 0.035, t, 0.1)
   } else {
-    engine.gain.gain.setTargetAtTime(0, t, 0.1)
+    // Corta el volumen inmediatamente para que no siga zumbando en pausa o reinicio
+    engine.gain.gain.cancelScheduledValues(t)
+    engine.gain.gain.setValueAtTime(0, t)
   }
+}
+
+/** Detiene y destruye por completo los osciladores del motor del buggy. */
+export function engineStop(): void {
+  if (!engine || !ac) return
+  try {
+    const t = ac.currentTime
+    engine.gain.gain.cancelScheduledValues(t)
+    engine.gain.gain.setValueAtTime(0, t)
+    engine.osc.stop(t + 0.01)
+    engine.osc2.stop(t + 0.01)
+    engine.osc.disconnect()
+    engine.osc2.disconnect()
+    engine.gain.disconnect()
+  } catch {
+    /* ignore */
+  }
+  engine = null
 }
 
 // ---------- Música ambiental generativa (menú y juego) ----------

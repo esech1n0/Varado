@@ -677,18 +677,100 @@ h2,
   opacity: 1;
 }
 
-.mini {
-  right: 14px;
-  top: 150px;
-  pointer-events: auto;
-  font-size: 11px;
-  font-weight: 600;
-  background: rgba(27, 24, 56, 0.8);
+/* Viñeta de despertar (ojos abriéndose desde el centro hacia afuera) */
+#wake-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  opacity: 0;
+  background: #000;
+  transition: opacity 0.6s ease-out;
+}
+
+#wake-vignette.active {
+  opacity: 1;
+  animation: wakeEyelids 2.6s cubic-bezier(0.2, 0.9, 0.4, 1) forwards;
+}
+
+@keyframes wakeEyelids {
+  0% {
+    opacity: 1;
+    background: #000;
+    -webkit-mask-image: radial-gradient(ellipse 2% 0.5% at center, transparent 0%, black 100%);
+    mask-image: radial-gradient(ellipse 2% 0.5% at center, transparent 0%, black 100%);
+  }
+  20% {
+    opacity: 1;
+    background: #000;
+    -webkit-mask-image: radial-gradient(ellipse 30% 10% at center, transparent 20%, black 100%);
+    mask-image: radial-gradient(ellipse 30% 10% at center, transparent 20%, black 100%);
+  }
+  40% {
+    opacity: 1;
+    background: #000;
+    -webkit-mask-image: radial-gradient(ellipse 18% 4% at center, transparent 10%, black 100%);
+    mask-image: radial-gradient(ellipse 18% 4% at center, transparent 10%, black 100%);
+  }
+  65% {
+    opacity: 0.95;
+    background: #000;
+    -webkit-mask-image: radial-gradient(ellipse 75% 45% at center, transparent 40%, black 100%);
+    mask-image: radial-gradient(ellipse 75% 45% at center, transparent 40%, black 100%);
+  }
+  85% {
+    opacity: 0.7;
+    background: #000;
+    -webkit-mask-image: radial-gradient(ellipse 120% 90% at center, transparent 65%, black 100%);
+    mask-image: radial-gradient(ellipse 120% 90% at center, transparent 65%, black 100%);
+  }
+  100% {
+    opacity: 0;
+    background: #000;
+    -webkit-mask-image: radial-gradient(ellipse 160% 120% at center, transparent 90%, black 100%);
+    mask-image: radial-gradient(ellipse 160% 120% at center, transparent 90%, black 100%);
+  }
+}
+
+/* Sugerencias de controles emergentes */
+#control-hint {
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(13, 17, 38, 0.94);
+  border: 3px solid var(--yellow);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.65), 3px 3px 0 var(--ink);
+  border-radius: 12px;
+  padding: 8px 18px;
   color: #fff;
+  font-family: 'Audiowide', 'Bangers', Impact, sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  white-space: nowrap;
+}
+
+#control-hint.hidden {
+  opacity: 0;
+  transform: translate(-50%, 14px);
+  pointer-events: none;
+}
+
+#control-hint kbd {
+  background: var(--yellow);
+  color: var(--ink);
+  padding: 2px 7px;
+  border-radius: 5px;
   border: 2px solid var(--ink);
-  border-radius: 6px;
-  padding: 2px 8px;
-  cursor: pointer;
+  font-size: 14px;
+  box-shadow: 1px 1px 0 var(--ink);
+  font-weight: bold;
 }
 
 /* ---------- Pantallas y Menú Principal ---------- */
@@ -769,7 +851,12 @@ h2,
 }
 
 .panel.small {
-  width: min(460px, 100%);
+  width: min(540px, 94vw);
+}
+
+.panel.small h2 {
+  font-size: clamp(22px, 5.2vw, 34px);
+  letter-spacing: 0.02em;
 }
 
 .panel.danger {
@@ -1038,10 +1125,10 @@ kbd {
 .settings-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 10px 4px 14px;
+  gap: 6px;
+  margin: 8px 4px 12px;
   text-align: left;
-  max-height: 58vh;
+  max-height: 68vh;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -1049,11 +1136,11 @@ kbd {
 .setting-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   background: rgba(27, 24, 56, 0.08);
   border: 2px solid var(--ink);
-  border-radius: 10px;
-  padding: 6px 12px;
+  border-radius: 9px;
+  padding: 4px 10px;
 }
 
 .setting-row label {
@@ -1121,6 +1208,38 @@ kbd {
   border-radius: 7px;
   box-shadow: 2px 2px 0 var(--ink);
   cursor: pointer;
+}
+
+.quality-pills {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.q-btn {
+  flex: 1;
+  padding: 7px 4px;
+  font-family: 'Audiowide', 'Bangers', Impact, sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.08s, background 0.15s;
+}
+
+.q-btn:hover {
+  background: #fdf5d6;
+}
+
+.q-btn.active {
+  background: var(--yellow);
+  border-color: var(--ink);
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--ink);
 }
 
 .hint {

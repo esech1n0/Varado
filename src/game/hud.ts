@@ -11,6 +11,7 @@ export class Hud {
   private capTimer = 0
   private radioTimer = 0
   private toastTimer = 0
+  private hintTimer = 0
   private lastHp = -1
   private lastWeapons = ''
   private lastStamina = ''
@@ -42,6 +43,33 @@ export class Hud {
     $('fuelN').textContent = String(carried)
     $('fuelT').textContent = String(total)
     $('fuel').classList.toggle('on', carried > 0 || placed > 0)
+  }
+
+  /** Viñeta de despertar estilo ojos abriéndose desde el centro hacia afuera. */
+  wakeUp(): void {
+    const el = $('wake-vignette')
+    if (!el) return
+    el.classList.remove('active')
+    void el.offsetWidth // forzar reflow para reiniciar la animación CSS
+    el.classList.add('active')
+    setTimeout(() => el.classList.remove('active'), 2800)
+  }
+
+  /** Muestra sugerencia emergente de controles o recordatorios de misión. */
+  showControlHint(html: string, ms = 5000): void {
+    const el = $('control-hint')
+    if (!el) return
+    el.innerHTML = html
+    el.classList.remove('hidden')
+    clearTimeout(this.hintTimer)
+    if (ms > 0) {
+      this.hintTimer = window.setTimeout(() => this.hideControlHint(), ms)
+    }
+  }
+
+  hideControlHint(): void {
+    const el = $('control-hint')
+    if (el) el.classList.add('hidden')
   }
 
   /** Aviso emergente al desbloquear un logro. */

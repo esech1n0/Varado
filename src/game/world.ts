@@ -24,7 +24,7 @@ export type TurretSpawn = { x: number; y: number }
 export type FenceSpawn = { ax: number; ay: number; bx: number; by: number; period: number; onTime: number; phase: number }
 export type PlateSpawn = { x: number; y: number; w: number; h: number; phase: number }
 export type CampSpawn = { x: number; y: number; soldier?: number; shooter?: number; tank?: number; spread: number; name?: string; visited?: boolean }
-export type BeaconSpawn = { x: number; y: number; name: string }
+export type BeaconSpawn = { x: number; y: number; name: string; buggyX?: number; buggyY?: number; buggyH?: number }
 export type WreckSpawn = { x: number; y: number; scale: number; rot: number }
 export type LegoSpawn = { x: number; y: number; variant: number }
 
@@ -427,6 +427,64 @@ export function buildWorld(scene: THREE.Scene): WorldData {
       world.add(beam, lamp)
     }
   }
+
+  // ---------- Armería vacía inicial (todos los estantes despojados salvo la pistola láser) ----------
+  // Mesa/pedestal tecnológico central donde descansa la pistola láser (x=560, y=335)
+  {
+    const desk = box(48, 16, 28, 0x1f232b, 560, 8, 335)
+    desk.material = getWallMat(0x1f232b, 'dark')
+    const deskRim = box(50, 2, 30, 0x3d4454, 560, 16, 335)
+    const cradlePad = new THREE.Mesh(new THREE.BoxGeometry(32, 1, 16), new THREE.MeshBasicMaterial({ color: 0x4df0ff }))
+    cradlePad.position.set(560, 17, 335)
+    world.add(desk, deskRim, cradlePad)
+    solid({ x: 560 - 24, y: 335 - 14, w: 48, h: 28, top: 18 })
+  }
+  // Estantes de armas vacíos montados en la pared norte y sur (armeros metálicos sin armas)
+  for (const rx of [260, 480, 720]) {
+    const rackN = box(44, 38, 6, 0x242832, rx, 24, FY0 + 3)
+    const ledN = new THREE.Mesh(new THREE.BoxGeometry(40, 2, 2), new THREE.MeshBasicMaterial({ color: 0xff2828 }))
+    ledN.position.set(rx, 42, FY0 + 6)
+    world.add(rackN, ledN)
+    const rackS = box(44, 38, 6, 0x242832, rx + 40, 24, FY1 - 3)
+    const ledS = new THREE.Mesh(new THREE.BoxGeometry(40, 2, 2), new THREE.MeshBasicMaterial({ color: 0xff2828 }))
+    ledS.position.set(rx + 40, 42, FY1 - 6)
+    world.add(rackS, ledS)
+  }
+  // Cajas de armamento abiertas y vacías (tapas abiertas, interior desvalijado)
+  {
+    const makeOpenCrate = (cx: number, cz: number, rot = 0, col = 0x354030): void => {
+      const g = new THREE.Group()
+      g.position.set(cx, 0, cz)
+      g.rotation.y = rot
+      g.add(box(32, 14, 2, col, 0, 7, -9))
+      g.add(box(32, 14, 2, col, 0, 7, 9))
+      g.add(box(2, 14, 16, col, -15, 7, 0))
+      g.add(box(2, 14, 16, col, 15, 7, 0))
+      g.add(box(32, 2, 20, col, 0, 1, 0))
+      const lid = box(34, 2, 22, col + 0x080808, 0, 14, 12)
+      lid.rotation.x = 0.55
+      g.add(lid)
+      world.add(g)
+      solid({ x: cx - 18, y: cz - 14, w: 36, h: 28, top: 16 })
+    }
+    makeOpenCrate(340, FY0 + 32, 0.2, 0x2f3a2b)
+    makeOpenCrate(420, FY0 + 40, -0.3, 0x283038)
+    makeOpenCrate(640, FY1 - 42, -0.15, 0x3a3028)
+    makeOpenCrate(760, FY1 - 36, 0.35, 0x2f3a2b)
+  }
+  // Banco de mantenimiento desvalijado y latas de munición vacías
+  {
+    const bench = box(56, 15, 22, 0x2c3038, 180, 7.5, FY1 - 32)
+    bench.material = getWallMat(0x2c3038, 'dark')
+    world.add(bench)
+    solid({ x: 180 - 28, y: FY1 - 32 - 11, w: 56, h: 22, top: 16 })
+    for (const [mx, mz] of [[220, FY1 - 48], [390, FY0 + 26], [690, FY1 - 28]]) {
+      const can = cyl(4.5, 4.5, 9, 0x444d3c, 10)
+      can.position.set(mx, 4.5, mz)
+      world.add(can)
+    }
+  }
+
   // muros de cierre que conectan el cuarto inicial (FY0..FY1) con el pasillo azul del doble de ancho (BY0..BY1)
   wall(D1X - 24, BY0 - 24, 36, FY0 - (BY0 - 24), ROOM_H, PAL.white, { style: 'ruin' })
   wall(D1X - 24, FY1, 36, BY1 + 24 - FY1, ROOM_H, PAL.white, { style: 'ruin' })
@@ -435,10 +493,12 @@ export function buildWorld(scene: THREE.Scene): WorldData {
   wall(D1X, BY0 - 24, D2X - D1X, 24, ROOM_H, PAL.white, { style: 'ruin' })
   wall(D1X, BY1, D2X - D1X, 24, ROOM_H, PAL.white, { style: 'ruin' })
   {
-    const r = seeded(7)
-    for (let x = 930; x < 1830; x += 52) {
-      wall(x, BY0 - 28, 30, 28, ROOM_H + Math.round(6 + r() * 14), PAL.white, { solid: false, style: 'ruin' })
-      wall(x + 22, BY1, 30, 28, ROOM_H + Math.round(6 + r() * 14), PAL.white, { solid: false, style: 'ruin' })
+    // Columnas / pilares que sobresalen hacia el interior, sin caras coplanares para eliminar Z-fighting y parpadeos
+    for (let x = 960; x < 1820; x += 110) {
+      wall(x, BY0, 24, 6, ROOM_H, PAL.white, { solid: false, studs: false, style: 'ruin' })
+      wall(x, BY1 - 6, 24, 6, ROOM_H, PAL.white, { solid: false, studs: false, style: 'ruin' })
+      wall(x - 4, BY0 - 26, 32, 28, 16, PAL.white, { solid: false, y0: ROOM_H, style: 'ruin' })
+      wall(x - 4, BY1 - 2, 32, 28, 16, PAL.white, { solid: false, y0: ROOM_H, style: 'ruin' })
     }
     // techo de ruina con aberturas (tragaluces rotos por donde entra luz)
     const spanZ = BY1 - BY0 + 48
@@ -545,24 +605,33 @@ export function buildWorld(scene: THREE.Scene): WorldData {
       }
       solid({ x: tx - 14, y: tz - 14, w: 28, h: 28, top: n * 10 })
     }
-    // dintel superior fijo sobre el portón de salida del garage
+    // Cajón / estructura superior hueca sobre el portón de salida donde se oculta la puerta al deslizarse hacia arriba
     const headerH = ROOM_H - (DOOR_H + 14)
-    const header = box(34, headerH, gd + 48, PAL.red.b, ZC_END + 15, DOOR_H + 14 + headerH / 2, gcz, false)
-    header.material = getWallMat(PAL.red.b, 'brick')
-    world.add(header)
+    const casingY = DOOR_H + 14 + headerH / 2
+    // Fascia frontal interior (lado garage)
+    const fasciaIn = box(8, headerH, gd + 48, PAL.red.b, ZC_END - 4, casingY, gcz, false)
+    fasciaIn.material = getWallMat(PAL.red.b, 'brick')
+    // Fascia trasera exterior (lado desierto)
+    const fasciaOut = box(8, headerH, gd + 48, PAL.red.b, ZC_END + 34, casingY, gcz, false)
+    fasciaOut.material = getWallMat(PAL.red.b, 'brick')
+    // Tapa superior del cajón
+    const casingCap = box(46, 8, gd + 48, PAL.red.b, ZC_END + 15, ROOM_H + 4, gcz, false)
+    world.add(fasciaIn, fasciaOut, casingCap)
   }
   const endWall = { x: ZC_END, y: FY0, w: 30, h: FY1 - FY0, on: true, top: DOOR_H + 14 } as Rect & { on: boolean }
   grid.add(endWall)
   const endWallMesh = wall(endWall.x, endWall.y, endWall.w, endWall.h, DOOR_H + 14, PAL.red, { solid: false, studs: false })
-  // Palanca en la pared del garage rojo junto al portón de salida
+  // Palanca empotrada a ras de la pared sur del garage rojo junto al portón de salida
   const leverRig = makeLever()
   const leverX = 2485
-  const leverY = FY0 + 5
+  const leverY = FY0 + 4
   leverRig.group.position.set(leverX, 0, leverY)
-  world.add(leverRig.group)
-  const leverPad = box(36, 1.2, 26, 0xffc61a, leverX, 0.6, FY0 + 20, false)
-  world.add(leverPad)
-  const lever = { ...leverRig, x: leverX, y: FY0 + 20 }
+  // Caja eléctrica de montaje empotrada en la pared y conducto vertical hacia el techo
+  const leverWallPlate = box(30, 44, 4, 0x1a1d24, leverX, 32, FY0 - 1)
+  const conduit = cyl(2, 2, 85, 0x5a6270, 8)
+  conduit.position.set(leverX + 11, 75, FY0 + 1)
+  world.add(leverRig.group, leverWallPlate, conduit)
+  const lever = { ...leverRig, x: leverX, y: FY0 + 16 }
   {
     const rc = seeded(19)
     for (const c of covers) {
@@ -1060,17 +1129,21 @@ export function buildWorld(scene: THREE.Scene): WorldData {
     { x: 7400, y: -1350, soldier: 4, shooter: 2, spread: 120 },
   )
 
-  // Balizas (puntos de control) distribuidas hasta el nuevo borde este
+  // Balizas (puntos de control) en las 3 estructuras principales y los 5 campamentos alienígenas
   beacons.push(
-    { x: 3050, y: 190, name: 'Baliza Hangar' },
-    { x: 4850, y: 340, name: 'Baliza Cementerio' },
-    { x: 6750, y: 180, name: 'Baliza Laboratorio' },
-    { x: 8850, y: 170, name: 'Baliza Torre' },
-    { x: 10350, y: 200, name: 'Baliza Depósito' },
-    { x: 11580, y: 200, name: 'Baliza Cráter' },
+    // Estructuras de puzzle
+    { x: 3380, y: 510, name: 'Baliza Hangar', buggyX: 3380, buggyY: 410, buggyH: -Math.PI / 2 },
+    { x: 6240, y: 520, name: 'Baliza Laboratorio', buggyX: 6240, buggyY: 420, buggyH: -Math.PI / 2 },
+    { x: 9145, y: 640, name: 'Baliza Torre', buggyX: 9145, buggyY: 530, buggyH: -Math.PI / 2 },
+    // Los 5 campamentos alienígenas
+    { x: 4850, y: -1480, name: 'Baliza Vigía Norte', buggyX: 4850, buggyY: -1360, buggyH: Math.PI / 2 },
+    { x: 6250, y: 1580, name: 'Baliza del Cañón', buggyX: 6250, buggyY: 1460, buggyH: -Math.PI / 2 },
+    { x: 9450, y: -1510, name: 'Baliza Bastión Este', buggyX: 9450, buggyY: -1390, buggyH: Math.PI / 2 },
+    { x: 9100, y: 1710, name: 'Baliza de las Dunas', buggyX: 9100, buggyY: 1590, buggyH: -Math.PI / 2 },
+    { x: 10950, y: 940, name: 'Baliza de Vanguardia', buggyX: 10950, buggyY: 820, buggyH: -Math.PI / 2 },
   )
 
-  // ---------- Rocas dispersas (instanciadas, más cantidad y variedad de alturas para el mapa doble) ----------
+  // ---------- Rocas dispersas, placas de dunas escalonadas y guijarros ----------
   {
     const r = seeded(31)
     const keepOut: { x: number; y: number; w: number; h: number }[] = []
@@ -1113,6 +1186,70 @@ export function buildWorld(scene: THREE.Scene): WorldData {
     inst.castShadow = true
     inst.receiveShadow = true
     world.add(inst)
+
+    // Placas de dunas areniscas escalonadas estilo LEGO (desnivel natural en el desierto sin bloquear el buggy)
+    const dunePlates: { x: number; y: number; w: number; d: number; h: number; c: number }[] = []
+    const duneColors = [0xc2a675, 0xd4ba8a, 0xaf9364, 0xb89c6b]
+    let duneTries = 0
+    while (dunePlates.length < 110 && duneTries++ < 3000) {
+      const w = 130 + r() * 160
+      const d = 100 + r() * 130
+      const x = WORLD.x0 + 80 + r() * (WORLD.x1 - WORLD.x0 - 260)
+      const y = WORLD.y0 + 80 + r() * (WORLD.y1 - WORLD.y0 - 260)
+      if (keepOut.some(k => x + w > k.x && x < k.x + k.w && y + d > k.y && y < k.y + k.h)) continue
+      const h = 2.5 + r() * 4.5
+      const c = duneColors[Math.floor(r() * duneColors.length)]
+      dunePlates.push({ x, y, w, d, h, c })
+    }
+    if (dunePlates.length > 0) {
+      const duneInst = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, map: rockTex, bumpMap: rockTex, bumpScale: 0.8, roughness: 0.88 }),
+        dunePlates.length,
+      )
+      dunePlates.forEach((it, i) => {
+        o.position.set(it.x + it.w / 2, it.h / 2, it.y + it.d / 2)
+        o.scale.set(it.w, it.h, it.d)
+        o.updateMatrix()
+        duneInst.setMatrixAt(i, o.matrix)
+        duneInst.setColorAt(i, col.setHex(it.c))
+      })
+      duneInst.receiveShadow = true
+      world.add(duneInst)
+    }
+
+    // Pequeñas rocas y montículos de cascotes alrededor de formaciones rocosas
+    const pebbles: { x: number; y: number; w: number; d: number; h: number; c: number }[] = []
+    const pebColors = [0x50483f, 0x6e6557, 0x857665, 0x423d38]
+    for (const it of items.slice(0, 180)) {
+      if (r() < 0.65) {
+        const pw = 14 + r() * 18
+        const pd = 14 + r() * 18
+        const ph = 6 + r() * 12
+        const px = it.x + (r() - 0.5) * (it.w + 30)
+        const py = it.y + (r() - 0.5) * (it.d + 30)
+        if (!keepOut.some(k => px + pw > k.x && px < k.x + k.w && py + pd > k.y && py < k.y + k.h)) {
+          pebbles.push({ x: px, y: py, w: pw, d: pd, h: ph, c: pebColors[Math.floor(r() * pebColors.length)] })
+        }
+      }
+    }
+    if (pebbles.length > 0) {
+      const pebInst = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, map: rockTex, bumpMap: rockTex, bumpScale: 1.2, roughness: 0.9 }),
+        pebbles.length,
+      )
+      pebbles.forEach((it, i) => {
+        o.position.set(it.x + it.w / 2, it.h / 2, it.y + it.d / 2)
+        o.scale.set(it.w, it.h, it.d)
+        o.updateMatrix()
+        pebInst.setMatrixAt(i, o.matrix)
+        pebInst.setColorAt(i, col.setHex(it.c))
+      })
+      pebInst.castShadow = true
+      pebInst.receiveShadow = true
+      world.add(pebInst)
+    }
   }
 
   buildStuds(world)

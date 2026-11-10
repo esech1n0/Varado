@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 import {
-  ALIENS, ARENA, BY0, BY1, CONFIG, GRENADE, IMPOSTOR_HP, LEGO_TOTAL, MAX_HP, ROOM_H, SETTINGS, SHIP, SNIPER, STAMINA, WALL_H, WEAPONS, WEAPON_ORDER, WORLD, ZC_END,
+  ALIENS, ARENA, BY0, BY1, CONFIG, DOOR_H, GRENADE, IMPOSTOR_HP, LEGO_TOTAL, MAX_HP, ROOM_H, SETTINGS, SHIP, SNIPER, STAMINA, WALL_H, WEAPONS, WEAPON_ORDER, WORLD, ZC_END,
   BOSS_GRENADE_FRAC, FUEL_TOTAL, DIFFICULTIES, type AlienKind, type AmmoWeapon, type WeaponId, type DifficultyId, type DifficultyDef, type Quality
 } from './config'
-import { beep, engineSet, setMusicMode, sfx } from './audio'
+import { beep, engineSet, engineStop, setMusicMode, sfx } from './audio'
 import { achievements } from './achievements'
 import { Fx } from './fx'
 import { Grid, angDiff, clamp, distSegPoint, inRect, lerp, losClear, moveCircle, rayDistance, rnd, segEnter, type Rect } from './geom'
@@ -30,7 +30,7 @@ export interface Turret { x: number; y: number; hp: number; state: 'idle' | 'loc
 export interface Gen { x: number; y: number; hp: number; alive: boolean; mesh: THREE.Group; core: THREE.Mesh }
 export interface Fence { spec: FenceSpawn; a: Gen; b: Gen; beams: THREE.Mesh[]; on: boolean; warn: boolean; len: number; ang: number }
 export interface Plate { spec: PlateSpawn; mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; hitCycle: number }
-export interface Beacon { x: number; y: number; name: string; active: boolean; mesh: THREE.Group; lamp: THREE.MeshBasicMaterial; ring: THREE.MeshBasicMaterial }
+export interface Beacon { x: number; y: number; name: string; active: boolean; mesh: THREE.Group; lamp: THREE.MeshBasicMaterial; ring: THREE.MeshBasicMaterial; buggyX?: number; buggyY?: number; buggyH?: number }
 export interface Bullet { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; mesh: THREE.Mesh; speed: number }
 export interface EProj { x: number; y: number; vx: number; vy: number; life: number; dmg: number; mesh: THREE.Object3D; cause: DeathCause }
 export interface Enemy {
@@ -112,7 +112,9 @@ export class Game {
     fuelCarried: 0, fuelPlaced: 0,
   }
   buggy = { x: 2260, y: 270, h: 0, v: 0, r: 26, riding: false, spin: 0, boarded: false, bump: 0 }
-  cp = { x: 110, y: 270, name: 'Inicio' }
+  cp: { x: number; y: number; name: string; buggyX?: number; buggyY?: number; buggyH?: number } = { x: 110, y: 270, name: 'Inicio' }
+  garageDoorAnim = false
+  garageDoorOpenT = 0
   flags = {
     impDead: false, gate: false, towerMsg: false, arenaMsg: false, bossWoke: false, bossDead: false, hordeMsg: false, hangarMsg: false,
     pistolMsg: false, shipHint: false, boarded: false, d1snd: false, d2snd: false, leverPulled: false, fuelThought: false,
@@ -409,7 +411,7 @@ export class Game {
       const lamp = (mesh.userData.lamp as THREE.Mesh).material as THREE.MeshBasicMaterial
       const ring = (mesh.userData.ring as THREE.Mesh).material as THREE.MeshBasicMaterial
       this.dyn.add(mesh)
-      this.beacons.push({ x: s.x, y: s.y, name: s.name, active: false, mesh, lamp, ring })
+      this.beacons.push({ x: s.x, y: s.y, name: s.name, active: false, mesh, lamp, ring, buggyX: s.buggyX, buggyY: s.buggyY, buggyH: s.buggyH })
     }
     // naves siniestradas (modelos generados)
     for (const w of W.wrecks) {
@@ -476,8 +478,12 @@ export class Game {
       x: 1500, y: 270, hp: IMPOSTOR_HP * this.diff.hp, state: 'dormant', t: 0, face: Math.PI, flash: 0, stun: 0, spitCd: 2.2 * this.diff.attack, chargeCd: 3.5 * this.diff.attack, biteCd: 0, wind: null,
       charging: 0, cdir: 0, stuckT: 0, lx: 1500, ly: 270, detour: 0, dd: 1, mouth: 0.35,
     })
+    engineStop()
+    this.garageDoorAnim = false
+    this.garageDoorOpenT = 0
     this.world.endWall.on = true
     this.world.endWallMesh.visible = true
+    this.world.endWallMesh.position.y = (DOOR_H + 14) / 2
     this.world.lever.arm.rotation.x = -0.65
     this.world.lever.lamp.color.setHex(0xff3b4a)
     for (const s of this.world.sites) s.visited = false
@@ -706,10 +712,13 @@ export class Game {
   }
 
   start(): void {
+    engineStop()
     this.resetRun()
     this.mode = 'play'
     setMusicMode('play')
     this.hud.showHud(true, this.input.touchMode)
+    this.hud.wakeUp()
+    this.hud.showControlHint('<kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> Moverse &nbsp;·&nbsp; <kbd>Ratón / Flechas</kbd> Mover la mira', 7000)
     this.hud.caption('1. El descubrimiento', 2800)
     this.say('El transmisor está muerto... sin señal de la estación. Estoy varado.', 1.2)
     this.say('Hay una infestación en este planeta. Si quiero salir con vida, debo encontrar una forma de escapar.', 6.5)
@@ -771,9 +780,26 @@ export class Game {
       this.buggy.spin += (this.buggy.v * dt) / 11
       if (Math.abs(this.buggy.v) <= 0.1) this.buggy.v = 0
     }
+    // Animación de portón exterior del garage deslizándose hacia arriba y ocultándose en el cajón superior
+    if (this.garageDoorAnim) {
+      this.garageDoorOpenT = Math.min(1, this.garageDoorOpenT + dt / 1.6)
+      const baseH = DOOR_H + 14
+      this.world.endWallMesh.position.y = (baseH / 2) + this.garageDoorOpenT * baseH
+      if (this.garageDoorOpenT >= 0.5) {
+        this.world.endWall.on = false
+      }
+      if (this.garageDoorOpenT >= 1) {
+        this.garageDoorAnim = false
+      }
+    }
+
     if ((this.p.x > ZC_END + 30 || this.buggy.x > ZC_END + 30) && !this.flags.fuelThought) {
       this.flags.fuelThought = true
       this.say('El cohete de escape necesitará combustible. Tres piedras ignífugas bastarán para llegar al planeta más cercano... deben estar esparcidas por este páramo.', 2)
+      setTimeout(() => {
+        const found = this.p.fuelCarried + this.p.fuelPlaced
+        this.hud.showControlHint(`Piedras ignífugas encontradas ${found}/3`, 5000)
+      }, 7200)
     }
     this.updateStamina(dt)
     this.handleWeaponKeys()
@@ -1421,12 +1447,13 @@ export class Game {
       this.flags.leverPulled = true
       this.world.lever.arm.rotation.x = -0.5
       this.world.lever.lamp.color.setHex(0x3bff8a)
-      this.world.endWall.on = false
-      this.world.endWallMesh.visible = false
+      this.garageDoorAnim = true
+      this.garageDoorOpenT = 0
       if (this.leverArrowM) this.leverArrowM.visible = false
       sfx.lever()
+      sfx.door()
       this.shake = 4
-      this.hud.caption('¡Portón exterior abierto!', 2200)
+      this.hud.caption('¡Portón exterior abriéndose!', 2400)
       achievements.add('lever')
       return
     }
@@ -1540,6 +1567,7 @@ export class Game {
       im.t = 0
       this.shake = 10
       this.hud.caption('¡El impostor se transforma!', 2600)
+      this.hud.showControlHint('<kbd>Shift</kbd> Correr &nbsp;·&nbsp; <kbd>C</kbd> Esquivar / Dash', 6500)
       beep(80, 1.1, { type: 'sawtooth', vol: 0.08, slide: 260 })
     }
     this.updateImpostor(dt)
@@ -1704,7 +1732,9 @@ export class Game {
         achievements.add('fuel')
         sfx.pickup()
         this.fx.burst(f.x, f.y, 22, 0xff7722, 180, 0.6, 4, f.z + 10)
-        this.hud.caption(`¡Piedra ignífuga obtenida! (${p.fuelCarried + p.fuelPlaced}/3)`, 2600)
+        const stonesFound = p.fuelCarried + p.fuelPlaced
+        this.hud.caption(`¡Piedra ignífuga obtenida! (${stonesFound}/3)`, 2600)
+        this.hud.showControlHint(`Piedras ignífugas encontradas ${stonesFound}/3`, 5000)
         if (p.fuelCarried + p.fuelPlaced >= 3) {
           this.say('Ya tengo las 3 piedras ignífugas. Ahora al cohete de escape.', 0.5)
         }
@@ -1812,7 +1842,7 @@ export class Game {
     for (const b of this.beacons) {
       if (b.active || Math.hypot(p.x - b.x, p.y - b.y) > 80) continue
       this.setBeacon(b, true)
-      this.cp = { x: b.x, y: b.y + 56, name: b.name }
+      this.cp = { x: b.x, y: b.y + 40, name: b.name, buggyX: b.buggyX, buggyY: b.buggyY, buggyH: b.buggyH }
       p.hp = Math.min(MAX_HP, p.hp + 30)
       achievements.add('beacon')
       sfx.checkpoint()
@@ -2029,6 +2059,7 @@ export class Game {
   }
 
   respawn(): void {
+    engineStop()
     const p = this.p
     const cp = this.cp
     p.x = cp.x
@@ -2051,11 +2082,23 @@ export class Game {
     this.eprojs = []
     this.spits = []
     this.bullets = []
-    // el buggy te espera en la baliza
+    // Estado del portón del garage según si ya se tiró de la palanca
+    if (this.flags.leverPulled) {
+      this.world.endWall.on = false
+      this.world.endWallMesh.visible = true
+      this.world.endWallMesh.position.y = (DOOR_H + 14) * 1.5
+    } else {
+      this.garageDoorAnim = false
+      this.garageDoorOpenT = 0
+      this.world.endWall.on = true
+      this.world.endWallMesh.visible = true
+      this.world.endWallMesh.position.y = (DOOR_H + 14) / 2
+    }
+    // El buggy te espera fuera de la entrada de la estructura mirando hacia la carretera
     if (this.flags.boarded && cp.x > ZC_END) {
-      this.buggy.x = cp.x + 70
-      this.buggy.y = cp.y - 10
-      this.buggy.h = 0
+      this.buggy.x = cp.buggyX ?? (cp.x + 70)
+      this.buggy.y = cp.buggyY ?? (cp.y - 10)
+      this.buggy.h = cp.buggyH ?? 0
       this.buggy.v = 0
     }
     this.buggy.riding = false
@@ -3011,22 +3054,35 @@ export class Game {
       return
     }
     const D = ride ? 210 : 150
-    const sh = ride ? 0 : 26
-    const pivX = px + rx * sh
+    let effSh = ride ? 0 : 22
+    // Verificar si el hombro derecho choca contra un muro adyacente y reducir el offset
+    if (effSh > 0) {
+      const checkSh = (r: Rect): void => {
+        if (r.on === false) return
+        const rTop = r.top ?? WALL_H
+        if (rTop <= gz + 10) return
+        const exp: Rect = { x: r.x - 18, y: r.y - 18, w: r.w + 36, h: r.h + 36 }
+        const t = segEnter(px, pz, px + rx * effSh, pz + rz * effSh, exp)
+        if (t >= 0 && t < 1) effSh *= Math.max(0, t - 0.05)
+      }
+      for (const r of this.grid.query(px - 36, pz - 36, px + 36, pz + 36, this.qbuf)) checkSh(r)
+      for (const r of this.extra) checkSh(r)
+    }
+    const pivX = px + rx * effSh
     const pivY = gz + (ride ? 36 : 42)
-    const pivZ = pz + rz * sh
+    const pivZ = pz + rz * effSh
     let tx = pivX - fx * cp * D
     let ty = pivY + sp * D
     let tz = pivZ - fz * cp * D
 
-    // Techo en el cuarto inicial, pasillo azul y garage rojo: mantener la cámara por debajo del techo
-    if (px < ZC_END + 40 && ty > ROOM_H - 12) {
-      ty = ROOM_H - 12
+    // Techo en construcciones cerradas: mantener la cámara por debajo del techo
+    if (px < ZC_END + 40 && ty > ROOM_H - 14) {
+      ty = ROOM_H - 14
     }
 
-    // Colisión adaptable de cámara de 3ª persona contra construcciones, muros y puertas
+    // Colisión adaptable de cámara de 3ª persona contra construcciones, muros y obstáculos
     let bestT = 1
-    const pad = 14
+    const pad = 24
     const checkRect = (r: Rect): void => {
       if (r.on === false) return
       const rTop = r.top ?? WALL_H
@@ -3035,22 +3091,25 @@ export class Game {
       const t = segEnter(pivX, pivZ, tx, tz, expanded)
       if (t >= 0 && t < bestT) {
         const hitY = pivY + (ty - pivY) * t
-        if (hitY < rTop + 6) bestT = t
+        if (hitY < rTop + 4) bestT = t
       }
     }
-    const list = this.grid.query(pivX, pivZ, tx, tz, this.qbuf)
+    const list = this.grid.query(Math.min(pivX, tx) - pad, Math.min(pivZ, tz) - pad, Math.max(pivX, tx) + pad, Math.max(pivZ, tz) + pad, this.qbuf)
     for (const r of list) checkRect(r)
     for (const r of this.extra) checkRect(r)
 
     if (bestT < 1) {
-      const pull = Math.max(0.12, bestT - 0.04)
+      const pull = Math.max(0.08, bestT - 0.04)
       tx = pivX + (tx - pivX) * pull
       ty = pivY + (ty - pivY) * pull
       tz = pivZ + (tz - pivZ) * pull
     }
 
     if (!this.camInit) { this.camPos.set(tx, ty, tz); this.camInit = true }
-    const k = bestT < 1 ? 1 - Math.pow(0.00001, dt) : 1 - Math.pow(0.0008, dt)
+    // Al chocar contra un muro o pared, responder inmediatamente para evitar atravesarlo
+    const targetDist = Math.hypot(tx - pivX, tz - pivZ)
+    const currentDist = Math.hypot(this.camPos.x - pivX, this.camPos.z - pivZ)
+    const k = targetDist < currentDist ? 1 : (1 - Math.pow(0.0008, dt))
     this.camPos.x = lerp(this.camPos.x, tx, k)
     this.camPos.y = lerp(this.camPos.y, ty, k)
     this.camPos.z = lerp(this.camPos.z, tz, k)

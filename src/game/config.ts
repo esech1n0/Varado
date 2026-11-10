@@ -59,10 +59,10 @@ export type DifficultyDef = {
   hp: number
 }
 export const DIFFICULTIES: Record<DifficultyId, DifficultyDef> = {
-  easy: { id: 'easy', name: 'Fácil', blurb: 'Menos enemigos, más lentos y con ataques más pausados. +30% de drops.', spawn: 0.7, speed: 0.9, attack: 1.25, drops: 1.3, hp: 1 },
-  normal: { id: 'normal', name: 'Moderado', blurb: 'La experiencia base de Varado.', spawn: 1, speed: 1, attack: 1, drops: 1, hp: 1 },
-  hard: { id: 'hard', name: 'Difícil', blurb: '+10% de enemigos, +10% de velocidad, +5% de vida y −10% de drops.', spawn: 1.1, speed: 1.1, attack: 1, drops: 0.9, hp: 1.05 },
-  infestation: { id: 'infestation', name: 'INFESTACIÓN', blurb: '+25% de enemigos, mucho más rápidos, +10% de vida y −15% de drops.', spawn: 1.25, speed: 1.2, attack: 1, drops: 0.85, hp: 1.1 },
+  easy: { id: 'easy', name: 'Fácil', blurb: 'Una travesía tranquila para explorar el planeta y dominar los controles sin agobios.', spawn: 0.7, speed: 0.9, attack: 1.25, drops: 1.3, hp: 1 },
+  normal: { id: 'normal', name: 'Moderado', blurb: 'El desafío original: supervivencia táctica, reflejos y adrenalina en equilibrio.', spawn: 1, speed: 1, attack: 1, drops: 1, hp: 1 },
+  hard: { id: 'hard', name: 'Difícil', blurb: 'Peligro constante. Recursos escasos y enemigos hostiles que no perdonan errores.', spawn: 1.1, speed: 1.1, attack: 1, drops: 0.9, hp: 1.05 },
+  infestation: { id: 'infestation', name: 'INFESTACIÓN', blurb: 'Mucha suerte.', spawn: 1.25, speed: 1.2, attack: 1, drops: 0.85, hp: 1.1 },
 }
 export const DIFFICULTY_ORDER: DifficultyId[] = ['easy', 'normal', 'hard', 'infestation']
 
@@ -164,7 +164,7 @@ export const GRENADE = {
   name: 'Granada de plasma',
   max: 5,
   pickupAmount: 2,
-  fuse: 3,
+  fuse: 1.0, // Bajado a 1 segundo según petición
   radius: 140,
   /** Radio interior (centro) donde el daño es el 100% de la vida. */
   core: 22,
