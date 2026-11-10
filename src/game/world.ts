@@ -623,7 +623,7 @@ export function buildWorld(scene: THREE.Scene): WorldData {
   const endWallMesh = wall(endWall.x, endWall.y, endWall.w, endWall.h, DOOR_H + 14, PAL.red, { solid: false, studs: false })
   // Palanca empotrada a ras de la pared sur del garage rojo junto al portón de salida
   const leverRig = makeLever()
-  const leverX = 2485
+  const leverX = 2518
   const leverY = FY0 + 4
   leverRig.group.position.set(leverX, 0, leverY)
   // Caja eléctrica de montaje empotrada en la pared y conducto vertical hacia el techo

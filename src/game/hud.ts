@@ -45,14 +45,17 @@ export class Hud {
     $('fuel').classList.toggle('on', carried > 0 || placed > 0)
   }
 
-  /** Viñeta de despertar estilo ojos abriéndose desde el centro hacia afuera. */
+  /** Viñeta de despertar: 2 segundos en pantalla negra y luego animación fluida abriendo los ojos. */
   wakeUp(): void {
     const el = $('wake-vignette')
     if (!el) return
-    el.classList.remove('active')
-    void el.offsetWidth // forzar reflow para reiniciar la animación CSS
-    el.classList.add('active')
-    setTimeout(() => el.classList.remove('active'), 2800)
+    el.className = 'wake-init'
+    setTimeout(() => {
+      el.className = 'wake-opening'
+    }, 2000)
+    setTimeout(() => {
+      el.className = 'hidden'
+    }, 4500)
   }
 
   /** Muestra sugerencia emergente de controles o recordatorios de misión. */

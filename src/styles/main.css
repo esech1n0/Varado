@@ -677,59 +677,98 @@ h2,
   opacity: 1;
 }
 
-/* Viñeta de despertar (ojos abriéndose desde el centro hacia afuera) */
+/* Viñeta de despertar (2 segundos negro total + párpados abriéndose 100% acelerados por GPU) */
 #wake-vignette {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 9;
-  opacity: 0;
-  background: #000;
-  transition: opacity 0.6s ease-out;
+  z-index: 100;
+  overflow: hidden;
+  background: transparent;
 }
 
-#wake-vignette.active {
+#wake-vignette.hidden {
+  display: none;
+}
+
+#wake-vignette.wake-init {
+  display: block;
+}
+
+#wake-vignette.wake-init .wake-lid {
+  transform: translateY(0);
+}
+
+#wake-vignette.wake-init .wake-blur {
   opacity: 1;
-  animation: wakeEyelids 2.6s cubic-bezier(0.2, 0.9, 0.4, 1) forwards;
 }
 
-@keyframes wakeEyelids {
-  0% {
-    opacity: 1;
-    background: #000;
-    -webkit-mask-image: radial-gradient(ellipse 2% 0.5% at center, transparent 0%, black 100%);
-    mask-image: radial-gradient(ellipse 2% 0.5% at center, transparent 0%, black 100%);
-  }
-  20% {
-    opacity: 1;
-    background: #000;
-    -webkit-mask-image: radial-gradient(ellipse 30% 10% at center, transparent 20%, black 100%);
-    mask-image: radial-gradient(ellipse 30% 10% at center, transparent 20%, black 100%);
-  }
-  40% {
-    opacity: 1;
-    background: #000;
-    -webkit-mask-image: radial-gradient(ellipse 18% 4% at center, transparent 10%, black 100%);
-    mask-image: radial-gradient(ellipse 18% 4% at center, transparent 10%, black 100%);
-  }
-  65% {
-    opacity: 0.95;
-    background: #000;
-    -webkit-mask-image: radial-gradient(ellipse 75% 45% at center, transparent 40%, black 100%);
-    mask-image: radial-gradient(ellipse 75% 45% at center, transparent 40%, black 100%);
-  }
-  85% {
-    opacity: 0.7;
-    background: #000;
-    -webkit-mask-image: radial-gradient(ellipse 120% 90% at center, transparent 65%, black 100%);
-    mask-image: radial-gradient(ellipse 120% 90% at center, transparent 65%, black 100%);
-  }
-  100% {
-    opacity: 0;
-    background: #000;
-    -webkit-mask-image: radial-gradient(ellipse 160% 120% at center, transparent 90%, black 100%);
-    mask-image: radial-gradient(ellipse 160% 120% at center, transparent 90%, black 100%);
-  }
+#wake-vignette.wake-opening {
+  display: block;
+}
+
+.wake-lid {
+  position: absolute;
+  left: -5%;
+  width: 110%;
+  height: 55%;
+  background: #000;
+  will-change: transform;
+}
+
+.wake-lid-top {
+  top: 0;
+  border-radius: 0 0 50% 50% / 0 0 45px 45px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.98);
+}
+
+.wake-lid-bottom {
+  bottom: 0;
+  border-radius: 50% 50% 0 0 / 45px 45px 0 0;
+  box-shadow: 0 -20px 45px rgba(0, 0, 0, 0.98);
+}
+
+.wake-blur {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.8) 85%, #000 100%);
+  pointer-events: none;
+  will-change: opacity;
+}
+
+#wake-vignette.wake-opening .wake-lid-top {
+  animation: openTopLid 2.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+#wake-vignette.wake-opening .wake-lid-bottom {
+  animation: openBottomLid 2.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+#wake-vignette.wake-opening .wake-blur {
+  animation: fadeWakeBlur 2.4s ease-out forwards;
+}
+
+@keyframes openTopLid {
+  0% { transform: translateY(0); }
+  35% { transform: translateY(-75%); }
+  48% { transform: translateY(-45%); }
+  72% { transform: translateY(-88%); }
+  100% { transform: translateY(-106%); }
+}
+
+@keyframes openBottomLid {
+  0% { transform: translateY(0); }
+  35% { transform: translateY(75%); }
+  48% { transform: translateY(45%); }
+  72% { transform: translateY(88%); }
+  100% { transform: translateY(106%); }
+}
+
+@keyframes fadeWakeBlur {
+  0% { opacity: 1; }
+  50% { opacity: 0.9; }
+  80% { opacity: 0.4; }
+  100% { opacity: 0; }
 }
 
 /* Sugerencias de controles emergentes */

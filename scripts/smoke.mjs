@@ -94,6 +94,9 @@ try {
   await page.waitForSelector('#hud:not(.hidden)', { timeout: 10_000 })
   console.log('smoke: HUD active')
 
+  // Wait for wake-up sequence (2s black + 2.4s eyelid opening)
+  await page.waitForTimeout(4600)
+
   // Simulate gameplay input
   await page.keyboard.down('KeyW')
   await page.waitForTimeout(600)

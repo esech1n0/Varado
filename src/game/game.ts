@@ -102,6 +102,8 @@ export class Game {
   pitch = 0.42
   private camPos = new THREE.Vector3(0, 80, 270)
   private camInit = false
+  private camYaw = 0
+  private camPitch = 0.42
   private lastLook = 0
   p = {
     x: 110, y: 270, r: 13, hp: MAX_HP, face: 0, walk: 0, moving: 0, cd: 0, inv: 0, kx: 0, ky: 0, weapon: 'pistol' as WeaponId,
@@ -450,6 +452,8 @@ export class Game {
     this.hurtFx = 0
     this.yaw = 0
     this.pitch = 0.42
+    this.camYaw = 0
+    this.camPitch = 0.42
     this.camInit = false
     this.mode = 'menu'
     Object.assign(this.p, {
@@ -720,8 +724,8 @@ export class Game {
     this.hud.wakeUp()
     this.hud.showControlHint('<kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> Moverse &nbsp;·&nbsp; <kbd>Ratón / Flechas</kbd> Mover la mira', 7000)
     this.hud.caption('1. El descubrimiento', 2800)
-    this.say('El transmisor está muerto... sin señal de la estación. Estoy varado.', 1.2)
-    this.say('Hay una infestación en este planeta. Si quiero salir con vida, debo encontrar una forma de escapar.', 6.5)
+    this.say('El transmisor está muerto... sin señal de la estación. Estoy varado.', 2.4)
+    this.say('Hay una infestación en este planeta. Si quiero salir con vida, debo encontrar una forma de escapar.', 7.8)
     sfx.door()
   }
 
@@ -2073,6 +2077,8 @@ export class Game {
     p.cd = 0.3
     this.yaw = 0
     this.pitch = 0.42
+    this.camYaw = 0
+    this.camPitch = 0.42
     this.camInit = false
     this.mode = 'play'
     this.deadShown = false
@@ -3038,11 +3044,11 @@ export class Game {
     const gz = ride ? 0 : this.world.heightAt(px, pz)
     const fx = Math.cos(this.yaw)
     const fz = Math.sin(this.yaw)
-    const rx = -fz
-    const rz = fx
     const cp = Math.cos(this.pitch)
     const sp = Math.sin(this.pitch)
     if (inScope) {
+      this.camYaw = this.yaw
+      this.camPitch = this.pitch
       const ex = px + fx * 10
       const ey = gz + 42
       const ez = pz + fz * 10
@@ -3053,36 +3059,51 @@ export class Game {
       this.world.sky.position.copy(cam.position)
       return
     }
-    const D = ride ? 210 : 150
-    let effSh = ride ? 0 : 22
-    // Verificar si el hombro derecho choca contra un muro adyacente y reducir el offset
-    if (effSh > 0) {
-      const checkSh = (r: Rect): void => {
-        if (r.on === false) return
-        const rTop = r.top ?? WALL_H
-        if (rTop <= gz + 10) return
-        const exp: Rect = { x: r.x - 18, y: r.y - 18, w: r.w + 36, h: r.h + 36 }
-        const t = segEnter(px, pz, px + rx * effSh, pz + rz * effSh, exp)
-        if (t >= 0 && t < 1) effSh *= Math.max(0, t - 0.05)
-      }
-      for (const r of this.grid.query(px - 36, pz - 36, px + 36, pz + 36, this.qbuf)) checkSh(r)
-      for (const r of this.extra) checkSh(r)
+
+    // Suavizado orbital continuo del ángulo de la cámara (giro fluido y cinemático sin desfasarse al cambiar de dirección)
+    if (!this.camInit) {
+      this.camYaw = this.yaw
+      this.camPitch = this.pitch
+      this.camInit = true
     }
-    const pivX = px + rx * effSh
+    const rotK = 1 - Math.pow(0.000008, dt)
+    this.camYaw += angDiff(this.camYaw, this.yaw) * rotK
+    this.camPitch += (this.pitch - this.camPitch) * rotK
+
+    const cfx = Math.cos(this.camYaw)
+    const cfz = Math.sin(this.camYaw)
+    const crx = -cfz
+    const crz = cfx
+    const ccp = Math.cos(this.camPitch)
+    const csp = Math.sin(this.camPitch)
+
+    const effSh = ride ? 0 : 16
+    const pivX = px + crx * effSh
     const pivY = gz + (ride ? 36 : 42)
-    const pivZ = pz + rz * effSh
-    let tx = pivX - fx * cp * D
-    let ty = pivY + sp * D
-    let tz = pivZ - fz * cp * D
+    const pivZ = pz + crz * effSh
 
-    // Techo en construcciones cerradas: mantener la cámara por debajo del techo
+    const D = ride ? 210 : 150
+    let tx = pivX - cfx * ccp * D
+    let ty = pivY + csp * D
+    let tz = pivZ - cfz * ccp * D
+
+    let bestT = 1
+
+    // Techo en construcciones cerradas (mantener la cámara por debajo del techo)
     if (px < ZC_END + 40 && ty > ROOM_H - 14) {
-      ty = ROOM_H - 14
+      const tRoof = (ROOM_H - 14 - pivY) / (ty - pivY)
+      if (tRoof >= 0 && tRoof < bestT) bestT = tRoof
     }
 
-    // Colisión adaptable de cámara de 3ª persona contra construcciones, muros y obstáculos
-    let bestT = 1
-    const pad = 24
+    // Suelo / terreno: la cámara NUNCA traspasa el piso al mirar hacia arriba
+    const minCamY = (ride ? 0 : this.world.heightAt(tx, tz)) + 14
+    if (ty < minCamY && pivY > minCamY) {
+      const tFloor = (minCamY - pivY) / (ty - pivY)
+      if (tFloor >= 0 && tFloor < bestT) bestT = tFloor
+    }
+
+    // Colisión de cámara contra construcciones, muros y obstáculos
+    const pad = 20
     const checkRect = (r: Rect): void => {
       if (r.on === false) return
       const rTop = r.top ?? WALL_H
@@ -3098,24 +3119,20 @@ export class Game {
     for (const r of list) checkRect(r)
     for (const r of this.extra) checkRect(r)
 
-    if (bestT < 1) {
-      const pull = Math.max(0.08, bestT - 0.04)
-      tx = pivX + (tx - pivX) * pull
-      ty = pivY + (ty - pivY) * pull
-      tz = pivZ + (tz - pivZ) * pull
-    }
+    // Ajustar distancia de la cámara según obstáculos o suelo
+    const effD = Math.max(18, D * bestT - 4)
+    tx = pivX - cfx * ccp * effD
+    ty = pivY + csp * effD
+    tz = pivZ - cfz * ccp * effD
 
-    if (!this.camInit) { this.camPos.set(tx, ty, tz); this.camInit = true }
-    // Al chocar contra un muro o pared, responder inmediatamente para evitar atravesarlo
-    const targetDist = Math.hypot(tx - pivX, tz - pivZ)
-    const currentDist = Math.hypot(this.camPos.x - pivX, this.camPos.z - pivZ)
-    const k = targetDist < currentDist ? 1 : (1 - Math.pow(0.0008, dt))
-    this.camPos.x = lerp(this.camPos.x, tx, k)
-    this.camPos.y = lerp(this.camPos.y, ty, k)
-    this.camPos.z = lerp(this.camPos.z, tz, k)
+    // Salvaguarda final contra penetración del terreno
+    const floorLimit = (ride ? 0 : this.world.heightAt(tx, tz)) + 12
+    if (ty < floorLimit) ty = floorLimit
+
     const sk = this.shake * 0.35
-    cam.position.set(this.camPos.x + (sk ? rnd(-sk, sk) : 0), this.camPos.y + (sk ? rnd(-sk, sk) : 0), this.camPos.z + (sk ? rnd(-sk, sk) : 0))
-    cam.lookAt(pivX + fx * 260, pivY - sp * 240 + 8, pivZ + fz * 260)
+    this.camPos.set(tx, ty, tz)
+    cam.position.set(tx + (sk ? rnd(-sk, sk) : 0), ty + (sk ? rnd(-sk, sk) : 0), tz + (sk ? rnd(-sk, sk) : 0))
+    cam.lookAt(pivX + cfx * 260, pivY - csp * 240 + 8, pivZ + cfz * 260)
     this.world.sky.position.copy(cam.position)
   }
 
