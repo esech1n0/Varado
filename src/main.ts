@@ -17,6 +17,7 @@ let game: Game
 
 try {
   game = new Game(canvas, input, hud)
+  ;(window as any).__GAME__ = game
 } catch (e) {
   console.error(e)
   $('load-hint')!.textContent = 'Este navegador no puede mostrar gráficos 3D (WebGL).'
@@ -456,35 +457,20 @@ bindVolumeSlider('vol-music', 'vol-music-val', 'musicVolume')
 
 // Sensibilidad
 const sensRange = $<HTMLInputElement>('sens-range')
-const sensInput = $<HTMLInputElement>('sens-input')
-const fmtSens = (v: number): string => Number(v.toFixed(2)).toString()
+const sensVal = $('sens-val')
+const fmtSens = (v: number): string => v.toFixed(1)
 
-sensRange.value = fmtSens(SETTINGS.sensitivity)
-sensInput.value = fmtSens(SETTINGS.sensitivity)
+if (sensRange && sensVal) {
+  sensRange.value = String(SETTINGS.sensitivity)
+  sensVal.textContent = fmtSens(SETTINGS.sensitivity)
 
-sensRange.addEventListener('input', () => {
-  const v = Math.max(0.1, Math.min(10, Math.round(Number(sensRange.value) * 10) / 10))
-  SETTINGS.sensitivity = v
-  sensInput.value = fmtSens(v)
-  saveSettings()
-})
-
-const applySensFromInput = (clampToBounds: boolean): void => {
-  const raw = sensInput.value.replace(',', '.').trim()
-  const parsed = Number.parseFloat(raw)
-  if (!Number.isFinite(parsed)) {
-    if (clampToBounds) sensInput.value = fmtSens(SETTINGS.sensitivity)
-    return
-  }
-  const v = Math.max(0.1, Math.min(10, Math.round(parsed * 100) / 100))
-  SETTINGS.sensitivity = v
-  sensRange.value = String(v)
-  if (clampToBounds) sensInput.value = fmtSens(v)
-  saveSettings()
+  sensRange.addEventListener('input', () => {
+    const v = Math.max(0.1, Math.min(10, Math.round(Number(sensRange.value) * 10) / 10))
+    SETTINGS.sensitivity = v
+    sensVal.textContent = fmtSens(v)
+    saveSettings()
+  })
 }
-sensInput.addEventListener('input', () => applySensFromInput(false))
-sensInput.addEventListener('change', () => applySensFromInput(true))
-sensInput.addEventListener('blur', () => applySensFromInput(true))
 
 // Botones de calidad gráfica horizontal
 const qBtns = document.querySelectorAll<HTMLButtonElement>('.q-btn')

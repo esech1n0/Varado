@@ -149,6 +149,8 @@ export class Game {
   hordeCount = 0
   noiseT = 0
   lastFireT = -10
+  aimStance = 0
+  weaponKick = 0
   deadT = 0
   endT = 0
   radioQ: { t: number; text: string }[] = []
@@ -457,6 +459,8 @@ export class Game {
     this.camPitch = 0.42
     this.camInit = false
     this.lastFireT = -10
+    this.aimStance = 0
+    this.weaponKick = 0
     this.mode = 'menu'
     Object.assign(this.p, {
       x: 110, y: 270, hp: MAX_HP, face: 0, walk: 0, moving: 0, cd: 0, inv: 0, kx: 0, ky: 0, weapon: 'pistol', danger: 99, alive: true,
@@ -1032,6 +1036,7 @@ export class Game {
     }
     p.cd = w.rate
     this.lastFireT = this.t
+    this.weaponKick = (w.id === 'shotgun') ? 0.16 : 0.08
     if (w.id === 'sniper') {
       this.fireSniper()
       return
@@ -1086,6 +1091,7 @@ export class Game {
   /** Disparo del Francotirador: bala de luz instantánea en 3D (200 daño; de cerca mata al instante). */
   private fireSniper(): void {
     this.lastFireT = this.t
+    this.weaponKick = 0.18
     const p = this.p
     const w = WEAPONS.sniper
     const fx = Math.cos(this.yaw)
@@ -2106,6 +2112,8 @@ export class Game {
     this.camPitch = 0.42
     this.camInit = false
     this.lastFireT = -10
+    this.aimStance = 0
+    this.weaponKick = 0
     p.face = 0
     this.mode = 'play'
     this.deadShown = false
@@ -2879,12 +2887,92 @@ export class Game {
       this.playerM.position.set(b.x - Math.cos(b.h) * 8, 12, b.y - Math.sin(b.h) * 8)
       this.playerM.rotation.y = -b.h
       rig.legs.forEach(l => (l.rotation.z = 0))
+      rig.torso.rotation.set(0, 0, 0)
+      rig.headGroup.rotation.set(0, 0, 0)
+      rig.armR.rotation.set(0, 0.2, 0.2)
+      rig.armL.rotation.set(0, -0.2, 0.2)
+      rig.weaponMount.visible = false
     } else {
       this.playerM.position.set(p.x, gz + Math.abs(Math.sin(p.walk)) * 1.2 * p.moving, p.y)
       this.playerM.rotation.y = -p.face
       const sw = Math.sin(p.walk) * 0.7 * p.moving
       rig.legs[0].rotation.z = sw
       rig.legs[1].rotation.z = -sw
+
+      // Suavizado de postura: 0 = reposo / guardia baja, 1 = encarando y apuntando
+      const isAiming = (this.input.fire || p.zoomed || (this.t - this.lastFireT < 0.4)) && p.alive
+      const currentGunOwned = p.owned[p.weapon]
+      const targetStance = (isAiming && currentGunOwned) ? 1 : 0
+      const stanceSpd = isAiming ? 20 : 7
+      this.aimStance += (targetStance - this.aimStance) * (1 - Math.exp(-stanceSpd * dt))
+      this.weaponKick = Math.max(0, this.weaponKick - dt * 4.5)
+      const stance = this.aimStance
+      const kick = this.weaponKick
+
+      if (!currentGunOwned) {
+        // Sin arma en manos: brazos colgando y balanceándose con la caminata
+        rig.weaponMount.visible = false
+        rig.torso.rotation.set(0, 0, 0)
+        rig.headGroup.rotation.set(0, 0, 0)
+        rig.armR.rotation.set(0, 0, -1.25 + sw * 0.7)
+        rig.armL.rotation.set(0, 0, -1.25 - sw * 0.7)
+      } else if (p.weapon === 'pistol') {
+        // Pistola a UNA mano (derecha); brazo izquierdo relajado al costado con balanceo natural
+        rig.weaponMount.visible = true
+        rig.torso.rotation.set(0, lerp(0, 0.06, stance), 0)
+        rig.headGroup.rotation.set(0, lerp(0, -0.06, stance), 0)
+
+        const bobY = (1 - stance) * Math.sin(p.walk * 2) * 0.3 * p.moving
+        rig.weaponMount.position.set(
+          lerp(12, 18.5, stance),
+          lerp(22.5, 28.5, stance) + bobY,
+          lerp(9.5, 8.5, stance)
+        )
+        rig.weaponMount.rotation.set(
+          lerp(0, 0, stance),
+          lerp(0.05, -0.06, stance),
+          lerp(-0.66, 0, stance) + kick
+        )
+
+        rig.armR.rotation.set(
+          lerp(0, 0, stance),
+          lerp(0.06, -0.1, stance),
+          lerp(-0.66, 0.02, stance) + (1 - stance) * sw * 0.15 + kick * 0.7
+        )
+        rig.armL.rotation.set(0, 0, -1.25 - sw * (0.6 - stance * 0.3))
+      } else {
+        // Armas largas a DOS manos (rifle, escopeta, francotirador):
+        // Reposo: Guardia baja táctica a dos manos (cruzada al pecho a ~35° hacia abajo)
+        // Disparo: Postura táctica de tiro a dos manos con giro moderado del cuerpo (~22°)
+        rig.weaponMount.visible = true
+        rig.torso.rotation.set(0, lerp(0, 0.38, stance), 0)
+        rig.headGroup.rotation.set(0, lerp(0, -0.38, stance), 0)
+
+        const bobY = (1 - stance) * Math.sin(p.walk * 2) * 0.35 * p.moving
+        rig.weaponMount.position.set(
+          lerp(13, 15, stance),
+          lerp(23.5, 28, stance) + bobY,
+          lerp(2, 3, stance)
+        )
+        rig.weaponMount.rotation.set(
+          lerp(-0.16, 0, stance),
+          lerp(-0.22, -0.38, stance),
+          lerp(-0.58, 0, stance) + kick
+        )
+
+        // Brazo derecho: sostiene la culata y gatillo
+        rig.armR.rotation.set(
+          lerp(-0.18, 0.06, stance),
+          lerp(-0.32, -0.46, stance),
+          lerp(-0.48, 0.08, stance) + kick * 0.6
+        )
+        // Brazo izquierdo: cruza para sostener el guardamanos delantero
+        rig.armL.rotation.set(
+          lerp(0.24, -0.08, stance),
+          lerp(0.46, 0.44, stance),
+          lerp(-0.52, 0.14, stance) + kick * 0.4
+        )
+      }
     }
     for (const k of WEAPON_ORDER) rig.guns[k].visible = !riding && p.owned[k] && p.weapon === k
 

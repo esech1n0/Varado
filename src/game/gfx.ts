@@ -316,7 +316,18 @@ function tbox(w: number, h: number, d: number, color: number, kind: DetailKind, 
 }
 
 // ---------- Astronauta (jugador) ----------
-export type PlayerRig = { legs: THREE.Group[]; guns: Record<Exclude<GunKind, 'plasma'>, THREE.Group>; torso: THREE.Group }
+export type PlayerRig = {
+  legs: THREE.Group[]
+  armR: THREE.Group
+  armL: THREE.Group
+  handR: THREE.Group
+  handL: THREE.Group
+  headGroup: THREE.Group
+  guns: Record<Exclude<GunKind, 'plasma'>, THREE.Group>
+  torso: THREE.Group
+  weaponMount: THREE.Group
+}
+
 export function makePlayer(): THREE.Group {
   const g = new THREE.Group()
   const w = 0xf6f6f2
@@ -336,34 +347,89 @@ export function makePlayer(): THREE.Group {
   torso.add(tbox(12, 17, 21, w, 'suit', 0, 27, 0))
   torso.add(box(0.6, 6, 6, 0x6e7480, 6.2, 30, 3))
   torso.add(tbox(7, 17, 14, 0x8c919c, 'pack', -9.5, 28, 0))
-  for (const s of [-1, 1]) {
-    torso.add(tbox(15, 5, 5, w, 'suit', 8, 29, s * 11))
-    const h = cyl(3, 3, 5, ye, 10)
-    h.material = detailMat(ye, 'trim')
-    h.rotation.x = Math.PI / 2
-    h.position.set(17, 29, s * 8)
-    torso.add(h)
-  }
+
+  // Brazo derecho articulado (hombro Z = +10.5, lado derecho del personaje)
+  const armR = new THREE.Group()
+  armR.position.set(0, 28.5, 10.5)
+  const shoulderR = cyl(3.2, 3.2, 4.8, w, 10)
+  shoulderR.rotation.x = Math.PI / 2
+  shoulderR.material = detailMat(w, 'suit')
+  armR.add(shoulderR)
+  armR.add(tbox(14, 4.6, 4.6, w, 'suit', 6.8, 0, 0))
+  const handR = new THREE.Group()
+  handR.position.set(13.8, 0, 0)
+  const cuffR = cyl(2.5, 2.5, 2, 0xd4d7dc, 10)
+  cuffR.rotation.z = Math.PI / 2
+  cuffR.position.set(-0.5, 0, 0)
+  const clampR = cyl(2.8, 2.8, 4, ye, 12)
+  clampR.material = detailMat(ye, 'trim')
+  clampR.rotation.x = Math.PI / 2
+  clampR.position.set(1.5, 0, 0)
+  handR.add(cuffR, clampR)
+  armR.add(handR)
+  torso.add(armR)
+
+  // Brazo izquierdo articulado (hombro Z = -10.5, lado izquierdo del personaje)
+  const armL = new THREE.Group()
+  armL.position.set(0, 28.5, -10.5)
+  const shoulderL = cyl(3.2, 3.2, 4.8, w, 10)
+  shoulderL.rotation.x = Math.PI / 2
+  shoulderL.material = detailMat(w, 'suit')
+  armL.add(shoulderL)
+  armL.add(tbox(14, 4.6, 4.6, w, 'suit', 6.8, 0, 0))
+  const handL = new THREE.Group()
+  handL.position.set(13.8, 0, 0)
+  const cuffL = cyl(2.5, 2.5, 2, 0xd4d7dc, 10)
+  cuffL.rotation.z = Math.PI / 2
+  cuffL.position.set(-0.5, 0, 0)
+  const clampL = cyl(2.8, 2.8, 4, ye, 12)
+  clampL.material = detailMat(ye, 'trim')
+  clampL.rotation.x = Math.PI / 2
+  clampL.position.set(1.5, 0, 0)
+  handL.add(cuffL, clampL)
+  armL.add(handL)
+  torso.add(armL)
+
+  // Soporte de armas montado en torso
+  const weaponMount = new THREE.Group()
+  weaponMount.position.set(14, 28, 0)
+  torso.add(weaponMount)
+
   const guns = { pistol: makeGun('pistol'), rifle: makeGun('rifle'), shotgun: makeGun('shotgun'), sniper: makeGun('sniper') }
+  guns.pistol.position.set(5, 7, 0)
+  guns.rifle.position.set(2, 9, 0)
+  guns.shotgun.position.set(6, 7, 0)
+  guns.sniper.position.set(10, 7, 0)
+
   for (const k of Object.keys(guns) as Exclude<GunKind, 'plasma'>[]) {
-    guns[k].position.set(23, 28, 0)
     guns[k].visible = false
-    torso.add(guns[k])
+    weaponMount.add(guns[k])
   }
+
+  // Cabeza y visor articulados
+  const headGroup = new THREE.Group()
+  headGroup.position.set(0, 44, 0)
   const head = ball(11, 0xffffff, {}, 22)
   head.material = detailMat(0xffffff, 'helmet')
-  head.position.set(0, 44, 0)
   head.scale.set(1, 1.05, 1)
-  torso.add(head)
+  headGroup.add(head)
+
   const face = ball(7, ye, { emissive: 0x553a00 })
-  face.position.set(7.2, 44, 0)
+  face.position.set(7.2, 0, 0)
   face.scale.set(0.55, 0.95, 1.1)
-  torso.add(face)
-  const vis = new THREE.Mesh(new THREE.SphereGeometry(7.6, 16, 12), new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.28, roughness: 0.1 }))
+  headGroup.add(face)
+
+  const vis = new THREE.Mesh(
+    new THREE.SphereGeometry(7.6, 16, 12),
+    new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.28, roughness: 0.1 }),
+  )
   vis.position.copy(face.position)
   vis.scale.copy(face.scale)
-  torso.add(vis)
-  g.userData = { legs, guns, torso } satisfies PlayerRig
+  headGroup.add(vis)
+
+  torso.add(headGroup)
+
+  g.userData = { legs, armR, armL, handR, handL, headGroup, guns, torso, weaponMount } satisfies PlayerRig
   return g
 }
 
