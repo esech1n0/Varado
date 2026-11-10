@@ -1,10 +1,14 @@
 import * as THREE from 'three'
-import { ALIENS, ARENA, BY0, BY1, CONFIG, GRENADE, IMPOSTOR_HP, LEGO_TOTAL, MAX_HP, ROOM_H, SETTINGS, SHIP, SNIPER, STAMINA, WALL_H, WEAPONS, WEAPON_ORDER, WORLD, ZC_END, type AlienKind, type AmmoWeapon, type WeaponId } from './config'
-import { beep, engineSet, sfx } from './audio'
+import {
+  ALIENS, ARENA, BY0, BY1, CONFIG, GRENADE, IMPOSTOR_HP, LEGO_TOTAL, MAX_HP, ROOM_H, SETTINGS, SHIP, SNIPER, STAMINA, WALL_H, WEAPONS, WEAPON_ORDER, WORLD, ZC_END,
+  BOSS_GRENADE_FRAC, FUEL_TOTAL, DIFFICULTIES, type AlienKind, type AmmoWeapon, type WeaponId, type DifficultyId, type DifficultyDef, type Quality
+} from './config'
+import { beep, engineSet, setMusicMode, sfx } from './audio'
+import { achievements } from './achievements'
 import { Fx } from './fx'
 import { Grid, angDiff, clamp, distSegPoint, inRect, lerp, losClear, moveCircle, rayDistance, rnd, segEnter, type Rect } from './geom'
 import {
-  basic, makeAmmo, makeBeacon, makeBone, makeBuggy, makeGenerator, makeGun, makeImpostor, makeLego, makeMedkit, makePlayer, makeTurret,
+  basic, makeAmmo, makeBeacon, makeBone, makeBuggy, makeFuelStone, makeGenerator, makeGun, makeImpostor, makeLego, makeMedkit, makePlayer, makeRocket, makeTurret,
   type ImpostorRig, type PlayerRig, type TurretRig,
 } from './gfx'
 import { Hud, type RadarDot } from './hud'
@@ -16,6 +20,7 @@ export type PickupKind = 'medkit' | 'ammo' | 'rifle' | 'shotgun' | 'pistol' | 'p
 export type Mode = 'menu' | 'play' | 'dead' | 'ending' | 'end'
 export type DeathCause = 'soldier' | 'shooter' | 'tank' | 'boss' | 'impostor' | 'turret' | 'fence' | 'plasma' | 'grenade'
 
+export interface FuelStone { x: number; y: number; z: number; taken: boolean; mesh: THREE.Group; glow: THREE.Mesh; ph: number }
 export interface Grenade { x: number; y: number; z: number; vx: number; vy: number; vz: number; fuse: number; stuck: null | { type: 'wall' } | { type: 'enemy'; e: Enemy; dx: number; dy: number } | { type: 'imp'; dx: number; dy: number }; mesh: THREE.Group; core: THREE.Mesh; light: THREE.Mesh }
 export interface Blast { mesh: THREE.Mesh; t: number; max: number }
 export interface Beam { mesh: THREE.Mesh; t: number; max: number }
@@ -26,7 +31,7 @@ export interface Gen { x: number; y: number; hp: number; alive: boolean; mesh: T
 export interface Fence { spec: FenceSpawn; a: Gen; b: Gen; beams: THREE.Mesh[]; on: boolean; warn: boolean; len: number; ang: number }
 export interface Plate { spec: PlateSpawn; mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; hitCycle: number }
 export interface Beacon { x: number; y: number; name: string; active: boolean; mesh: THREE.Group; lamp: THREE.MeshBasicMaterial; ring: THREE.MeshBasicMaterial }
-export interface Bullet { x: number; y: number; vx: number; vy: number; life: number; dmg: number; mesh: THREE.Mesh; speed: number }
+export interface Bullet { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; mesh: THREE.Mesh; speed: number }
 export interface EProj { x: number; y: number; vx: number; vy: number; life: number; dmg: number; mesh: THREE.Object3D; cause: DeathCause }
 export interface Enemy {
   id: number; kind: AlienKind; x: number; y: number; r: number; hp: number; maxHp: number; face: number
@@ -78,9 +83,15 @@ export class Game {
   private shield!: THREE.Mesh
   private chargeLine!: THREE.Mesh
   private arrowM!: THREE.Mesh
+  private leverArrowM!: THREE.Mesh
   private door1!: DoorRig
   private door2!: DoorRig
   private wreckMs: THREE.Group[] = []
+
+  // dificultad y piedras ignífugas
+  difficulty: DifficultyId = 'normal'
+  diff: DifficultyDef = DIFFICULTIES.normal
+  fuels: FuelStone[] = []
 
   // estado de la partida
   t = 0
@@ -98,12 +109,13 @@ export class Game {
     ammo: { rifle: 0, shotgun: 0, sniper: 0 } as Record<AmmoWeapon, number>, danger: 0, alive: true,
     stamina: STAMINA.max, exhausted: false, staminaIdle: 0, running: false, dashT: 0, dashCd: 0, dashX: 0, dashY: 0,
     grenades: 0, hasGrenade: false, grenadeCd: 0, zoomed: false,
+    fuelCarried: 0, fuelPlaced: 0,
   }
   buggy = { x: 2260, y: 270, h: 0, v: 0, r: 26, riding: false, spin: 0, boarded: false, bump: 0 }
   cp = { x: 110, y: 270, name: 'Inicio' }
   flags = {
     impDead: false, gate: false, towerMsg: false, arenaMsg: false, bossWoke: false, bossDead: false, hordeMsg: false, hangarMsg: false,
-    pistolMsg: false, shipHint: false, boarded: false, d1snd: false, d2snd: false,
+    pistolMsg: false, shipHint: false, boarded: false, d1snd: false, d2snd: false, leverPulled: false, fuelThought: false,
   }
   stats = { kills: 0, deaths: 0, lego: 0, ruins: 0, picks: 0 }
   d1 = 0
@@ -130,6 +142,7 @@ export class Game {
   private vpool: Record<AlienKind, THREE.Group[]> = { soldier: [], shooter: [], tank: [], boss: [] }
   private nextId = 1
   hordeT = 14
+  hordeCount = 0
   noiseT = 0
   deadT = 0
   endT = 0
@@ -152,6 +165,9 @@ export class Game {
     Object.assign(this.sun.shadow.camera, { left: -520, right: 520, top: 520, bottom: -520, near: 10, far: 1400 })
     this.sun.shadow.bias = -0.0006
 
+    this.camera.near = 0.35
+    this.applyQuality()
+
     this.world = buildWorld(this.scene)
     this.grid = this.world.grid
     this.door1 = this.world.doors.d1
@@ -166,6 +182,35 @@ export class Game {
     this.buildEntities()
     this.resize()
     addEventListener('resize', () => this.resize())
+  }
+
+  setDifficulty(d: DifficultyId): void {
+    this.difficulty = d
+    this.diff = DIFFICULTIES[d]
+  }
+
+  applyQuality(quality?: Quality): void {
+    if (quality) SETTINGS.quality = quality
+    const q = SETTINGS.quality
+    if (q === 'low') {
+      this.renderer.setPixelRatio(1)
+      this.renderer.shadowMap.enabled = false
+      this.camera.far = 7000
+      this.scene.fog = new THREE.Fog(0x03051a, 1100, 3400)
+    } else if (q === 'medium') {
+      this.renderer.setPixelRatio(1)
+      this.renderer.shadowMap.enabled = true
+      this.renderer.shadowMap.type = THREE.BasicShadowMap
+      this.camera.far = 9500
+      this.scene.fog = new THREE.Fog(0x03051a, 1400, 4400)
+    } else {
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+      this.renderer.shadowMap.enabled = true
+      this.renderer.shadowMap.type = THREE.PCFShadowMap
+      this.camera.far = 12000
+      this.scene.fog = new THREE.Fog(0x03051a, 1700, 5200)
+    }
+    this.camera.updateProjectionMatrix()
   }
 
   resize(): void {
@@ -249,6 +294,47 @@ export class Game {
     }
   }
 
+  /** Reubica las 3 piedras ignífugas en tercios diferentes del mapa abierto. */
+  private randomizeFuels(): void {
+    const zones: [number, number][] = [
+      [3400, 5600],
+      [6400, 8600],
+      [9200, 11400],
+    ]
+    const free = (x: number, y: number): boolean => {
+      if (Math.abs(y - 270) < 180) return false
+      for (const c of this.world.camps) {
+        if (Math.hypot(x - c.x, y - c.y) < 280) return false
+      }
+      for (const s of this.world.sites) {
+        if (x >= s.x - 40 && x <= s.x + s.w + 40 && y >= s.y - 40 && y <= s.y + s.d + 40) return false
+      }
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 8) * 6.283
+        const rr = i === 8 ? 0 : 36
+        if (this.solidAt(x + Math.cos(a) * rr, y + Math.sin(a) * rr)) return false
+      }
+      return true
+    }
+
+    this.fuels.forEach((f, idx) => {
+      const [x0, x1] = zones[idx % zones.length]
+      let px = 0
+      let py = 0
+      for (let tries = 0; tries < 300; tries++) {
+        px = rnd(x0, x1)
+        py = rnd(WORLD.y0 + 260, WORLD.y1 - 260)
+        if (free(px, py)) break
+      }
+      f.x = px
+      f.y = py
+      f.z = this.world.heightAt(px, py)
+      f.taken = false
+      f.mesh.position.set(px, f.z, py)
+      f.glow.position.set(px, f.z + 2, py)
+    })
+  }
+
   private makeGen(x: number, y: number): Gen {
     const mesh = makeGenerator()
     mesh.position.set(x, 0, y)
@@ -265,6 +351,14 @@ export class Game {
     for (let i = 0; i < GRENADE.spawns; i++) this.pickups.push(this.makePickup('plasma', 0, 0, false))
     this.randomizePlasma()
     this.randomizeCampLoot()
+    // piedras ignífugas (combustible para el cohete)
+    for (let i = 0; i < FUEL_TOTAL; i++) {
+      const mesh = makeFuelStone()
+      const glow = this.glowRing(0xff8a1f, 22)
+      this.itemsG.add(mesh, glow)
+      this.fuels.push({ x: 0, y: 0, z: 0, taken: false, mesh, glow, ph: Math.random() * 6 })
+    }
+    this.randomizeFuels()
     // piezas LEGO
     for (const s of W.legos) {
       const mesh = makeLego(s.variant)
@@ -325,11 +419,8 @@ export class Game {
       this.dyn.add(m)
       this.wreckMs.push(m)
     }
-    // nave de escape
-    this.shipM = new THREE.Group()
-    const ship = instance('ship', 230, 'length', 0xf1f2ee)
-    ship.rotation.y = Math.PI
-    this.shipM.add(ship)
+    // cohete de escape clásico LEGO
+    this.shipM = makeRocket()
     this.shipM.position.set(SHIP.x, 0, SHIP.y)
     this.dyn.add(this.shipM)
     this.shield = new THREE.Mesh(new THREE.SphereGeometry(150, 28, 18), new THREE.MeshBasicMaterial({ color: 0x57f2ff, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }))
@@ -343,7 +434,10 @@ export class Game {
     this.arrowM = new THREE.Mesh(new THREE.ConeGeometry(11, 24, 4), new THREE.MeshBasicMaterial({ color: 0xffd21f }))
     this.arrowM.rotation.x = Math.PI
     this.arrowM.visible = false
-    this.dyn.add(this.arrowM)
+    this.leverArrowM = new THREE.Mesh(new THREE.ConeGeometry(9, 20, 4), new THREE.MeshBasicMaterial({ color: 0xffd21f }))
+    this.leverArrowM.rotation.x = Math.PI
+    this.leverArrowM.position.set(W.lever.x, 62, W.lever.y)
+    this.dyn.add(this.arrowM, this.leverArrowM)
   }
 
   // ---------- Reinicio de partida ----------
@@ -358,10 +452,12 @@ export class Game {
     this.mode = 'menu'
     Object.assign(this.p, {
       x: 110, y: 270, hp: MAX_HP, face: 0, walk: 0, moving: 0, cd: 0, inv: 0, kx: 0, ky: 0, weapon: 'pistol', danger: 99, alive: true,
+      stamina: STAMINA.max, exhausted: false, staminaIdle: 0, running: false, dashT: 0, dashCd: 0, dashX: 0, dashY: 0,
+      grenades: 0, hasGrenade: false, grenadeCd: 0, zoomed: false,
+      fuelCarried: 0, fuelPlaced: 0,
     })
     this.p.owned = { pistol: false, rifle: false, shotgun: false, sniper: false }
     this.p.ammo = { rifle: 0, shotgun: 0, sniper: 0 }
-    Object.assign(this.p, { stamina: STAMINA.max, exhausted: false, staminaIdle: 0, running: false, dashT: 0, dashCd: 0, dashX: 0, dashY: 0, grenades: 0, hasGrenade: false, grenadeCd: 0, zoomed: false })
     for (const g of this.grenades) this.projG.remove(g.mesh)
     for (const b of this.blasts) this.projG.remove(b.mesh)
     for (const b of this.beams) this.projG.remove(b.mesh)
@@ -372,16 +468,18 @@ export class Game {
     this.cp = { x: 110, y: 270, name: 'Inicio' }
     this.flags = {
       impDead: false, gate: false, towerMsg: false, arenaMsg: false, bossWoke: false, bossDead: false, hordeMsg: false, hangarMsg: false,
-      pistolMsg: false, shipHint: false, boarded: false, d1snd: false, d2snd: false,
+      pistolMsg: false, shipHint: false, boarded: false, d1snd: false, d2snd: false, leverPulled: false, fuelThought: false,
     }
     this.stats = { kills: 0, deaths: 0, lego: 0, ruins: 0, picks: 0 }
     this.d1 = this.d2 = 0
     Object.assign(this.imp, {
-      x: 1500, y: 270, hp: IMPOSTOR_HP, state: 'dormant', t: 0, face: Math.PI, flash: 0, stun: 0, spitCd: 2.2, chargeCd: 3.5, biteCd: 0, wind: null,
+      x: 1500, y: 270, hp: IMPOSTOR_HP * this.diff.hp, state: 'dormant', t: 0, face: Math.PI, flash: 0, stun: 0, spitCd: 2.2 * this.diff.attack, chargeCd: 3.5 * this.diff.attack, biteCd: 0, wind: null,
       charging: 0, cdir: 0, stuckT: 0, lx: 1500, ly: 270, detour: 0, dd: 1, mouth: 0.35,
     })
     this.world.endWall.on = true
     this.world.endWallMesh.visible = true
+    this.world.lever.arm.rotation.x = -0.65
+    this.world.lever.lamp.color.setHex(0xff3b4a)
     for (const s of this.world.sites) s.visited = false
     // proyectiles y efectos
     for (const b of this.bullets) this.projG.remove(b.mesh)
@@ -393,7 +491,7 @@ export class Game {
     for (const b of this.bones) this.dyn.remove(b.mesh)
     this.bones = []
     this.fx.clear()
-    // suministros
+    // suministros y piedras ignífugas
     this.pickups = this.pickups.filter(p => {
       if (p.dyn) {
         this.itemsG.remove(p.mesh, p.glow)
@@ -404,6 +502,7 @@ export class Game {
     })
     this.randomizePlasma()
     this.randomizeCampLoot()
+    this.randomizeFuels()
     this.hud.setScope(false)
     for (const l of this.legos) l.taken = false
     for (const t of this.turrets) {
@@ -425,13 +524,15 @@ export class Game {
     }
     for (const pl of this.plates) pl.hitCycle = -1
     for (const b of this.beacons) this.setBeacon(b, false)
-    // enemigos
+    // enemigos según dificultad
     for (const e of this.enemies) this.releaseVisual(e)
     this.enemies = []
     for (const c of this.world.camps) {
       const kinds: [AlienKind, number][] = [['soldier', c.soldier ?? 0], ['shooter', c.shooter ?? 0], ['tank', c.tank ?? 0]]
       for (const [k, n] of kinds) {
-        for (let i = 0; i < n; i++) {
+        if (n <= 0) continue
+        const count = Math.max(1, Math.round(n * this.diff.spawn))
+        for (let i = 0; i < count; i++) {
           const a = Math.random() * 6.283
           const d = Math.sqrt(Math.random()) * c.spread
           this.placeEnemy(k, c.x + Math.cos(a) * d, c.y + Math.sin(a) * d, false)
@@ -439,15 +540,17 @@ export class Game {
       }
     }
     this.placeEnemy('boss', SHIP.x - 260, SHIP.y, false)
-    this.hordeT = 16
+    this.hordeT = 16 / this.diff.spawn
     this.noiseT = 0
     this.shield.visible = true
     this.shipM.position.set(SHIP.x, 0, SHIP.y)
     this.ending = { t: 0, fade: false, shown: false }
     this.radioQ = []
+    setMusicMode('menu')
     this.hud.fade(false)
     this.hud.boss(null)
     this.hud.setLego(0)
+    this.hud.setFuel(0)
     this.hud.setHp(MAX_HP, MAX_HP)
     this.hud.setStamina(STAMINA.max, STAMINA.max, false)
     this.shownObjective = ''
@@ -462,9 +565,10 @@ export class Game {
   // ---------- Enemigos: creación y visuales ----------
   placeEnemy(kind: AlienKind, x: number, y: number, roam: boolean): Enemy {
     const def = ALIENS[kind]
+    const hp = def.hp * this.diff.hp
     const e: Enemy = {
-      id: this.nextId++, kind, x, y, r: def.r, hp: def.hp, maxHp: def.hp, face: rnd(0, 6.283), state: 'idle', roam, homeX: x, homeY: y, homeFace: 0,
-      cd: rnd(0.2, 1), atk: 0, ph: rnd(0, 6), flash: 0, flashOn: false, mv: 0, speedMul: rnd(0.9, 1.15), stuckT: 0, lx: x, ly: y, detour: 0, dd: 1,
+      id: this.nextId++, kind, x, y, r: def.r, hp, maxHp: hp, face: rnd(0, 6.283), state: 'idle', roam, homeX: x, homeY: y, homeFace: 0,
+      cd: rnd(0.2, 1) * this.diff.attack, atk: 0, ph: rnd(0, 6), flash: 0, flashOn: false, mv: 0, speedMul: rnd(0.9, 1.15) * this.diff.speed, stuckT: 0, lx: x, ly: y, detour: 0, dd: 1,
       t: 0, deadT: 0, hitCar: 0, wind: null, strafe: Math.random() < 0.5 ? 1 : -1, charging: 0, cdir: 0, stage: 0, vis: null, pulse: 0,
     }
     e.homeFace = e.face
@@ -596,7 +700,7 @@ export class Game {
       if (q.t <= 0) {
         this.radioQ.splice(i, 1)
         this.hud.radio(q.text)
-        sfx.radio()
+        sfx.thought()
       }
     }
   }
@@ -604,10 +708,11 @@ export class Game {
   start(): void {
     this.resetRun()
     this.mode = 'play'
+    setMusicMode('play')
     this.hud.showHud(true, this.input.touchMode)
     this.hud.caption('1. El descubrimiento', 2800)
-    this.say('Aquí el sargento… estación, ¿me copian? …Nada. Sólo estática.', 1.2)
-    this.say('Hay una infestación alienígena en este planeta. Repito: infestación. Sin respuesta de la estación.', 7)
+    this.say('El transmisor está muerto... sin señal de la estación. Estoy varado.', 1.2)
+    this.say('Hay una infestación en este planeta. Si quiero salir con vida, debo encontrar una forma de escapar.', 6.5)
     sfx.door()
   }
 
@@ -656,6 +761,20 @@ export class Game {
     this.updateCamInput(dt)
     if (this.buggy.riding) this.updateBuggy(dt)
     else this.updateFoot(dt)
+    if (!this.buggy.riding && Math.abs(this.buggy.v) > 0.1) {
+      const decel = 240 * dt
+      this.buggy.v -= Math.sign(this.buggy.v) * Math.min(Math.abs(this.buggy.v), decel)
+      const c = { x: this.buggy.x, y: this.buggy.y, r: this.buggy.r }
+      moveCircle(this.grid, this.extra, c, Math.cos(this.buggy.h) * this.buggy.v * dt, Math.sin(this.buggy.h) * this.buggy.v * dt)
+      this.buggy.x = c.x
+      this.buggy.y = c.y
+      this.buggy.spin += (this.buggy.v * dt) / 11
+      if (Math.abs(this.buggy.v) <= 0.1) this.buggy.v = 0
+    }
+    if ((this.p.x > ZC_END + 30 || this.buggy.x > ZC_END + 30) && !this.flags.fuelThought) {
+      this.flags.fuelThought = true
+      this.say('El cohete de escape necesitará combustible. Tres piedras ignífugas bastarán para llegar al planeta más cercano... deben estar esparcidas por este páramo.', 2)
+    }
     this.updateStamina(dt)
     this.handleWeaponKeys()
     this.interact()
@@ -694,7 +813,7 @@ export class Game {
     if (k.has('ArrowRight')) { this.yaw += ts; this.lastLook = this.t }
     if (k.has('ArrowUp')) this.pitch -= ts * 0.5
     if (k.has('ArrowDown')) this.pitch += ts * 0.5
-    this.pitch = this.p.zoomed ? clamp(this.pitch, -0.45, 0.55) : clamp(this.pitch, 0.2, 0.8)
+    this.pitch = this.p.zoomed ? clamp(this.pitch, -1.05, 1.2) : clamp(this.pitch, -0.9, 1.1)
   }
 
   private updateFoot(dt: number): void {
@@ -716,6 +835,7 @@ export class Game {
       if (p.stamina <= 0) {
         p.exhausted = true
         p.running = false
+        achievements.add('exhaust')
       }
     }
 
@@ -730,6 +850,7 @@ export class Game {
       p.stamina -= STAMINA.dashCost
       p.staminaIdle = 0
       sfx.weapon()
+      achievements.add('dash')
       this.fx.burst(p.x - p.dashX * 10, p.y - p.dashY * 10, 8, 0xd8c79a, 120, 0.35, 4, 8)
     }
 
@@ -816,6 +937,7 @@ export class Game {
     if (inp.take('KeyZ')) {
       if (this.p.weapon === 'sniper' && this.p.owned.sniper && !this.buggy.riding && this.p.alive) {
         this.p.zoomed = !this.p.zoomed
+        if (this.p.zoomed) achievements.add('zoom')
         sfx.weapon()
       } else {
         this.p.zoomed = false
@@ -868,20 +990,36 @@ export class Game {
     const gz = this.world.heightAt(p.x, p.y)
     const mxp = p.x + fx * 36 + rx * 4
     const myp = p.y + fz * 36 + rz * 4
+    const mzp = gz + 28
     const ax = p.x + rx * 26 + fx * 620
     const ay = p.y + rz * 26 + fz * 620
     const base = Math.atan2(ay - myp, ax - mxp)
+    const vPitch = -this.pitch
+    const cosV = Math.cos(vPitch)
+    const sinV = Math.sin(vPitch)
     for (let i = 0; i < w.pellets; i++) {
       const a = base + (Math.random() - 0.5) * 2 * w.spread
       const spd = w.speed * (w.pellets > 1 ? rnd(0.9, 1.08) : 1)
       const m = new THREE.Mesh(bulletGeo, bulletMats[w.id])
       m.scale.set(w.id === 'shotgun' ? 8 : 15, 2.6, 2.6)
-      m.position.set(mxp, gz + 28, myp)
+      m.position.set(mxp, mzp, myp)
       m.rotation.y = -a
+      m.rotation.z = vPitch
       this.projG.add(m)
-      this.bullets.push({ x: mxp, y: myp, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, life: w.life, dmg: w.dmg, mesh: m, speed: spd })
+      this.bullets.push({
+        x: mxp,
+        y: myp,
+        z: mzp,
+        vx: Math.cos(a) * cosV * spd,
+        vy: Math.sin(a) * cosV * spd,
+        vz: sinV * spd,
+        life: w.life,
+        dmg: w.dmg,
+        mesh: m,
+        speed: spd,
+      })
     }
-    this.fx.burst(mxp, myp, w.id === 'shotgun' ? 8 : 3, w.color, 130, 0.12, 2.6, gz + 28)
+    this.fx.burst(mxp, myp, w.id === 'shotgun' ? 8 : 3, w.color, 130, 0.12, 2.6, mzp)
     if (w.id === 'shotgun') sfx.shotgun()
     else sfx.shoot(w.freq, w.id === 'rifle' ? 0.04 : 0.05)
     this.shake = Math.max(this.shake, w.shake)
@@ -892,7 +1030,7 @@ export class Game {
     }
   }
 
-  /** Disparo del Francotirador: bala de luz instantánea (200 daño; de cerca mata al instante). */
+  /** Disparo del Francotirador: bala de luz instantánea en 3D (200 daño; de cerca mata al instante). */
   private fireSniper(): void {
     const p = this.p
     const w = WEAPONS.sniper
@@ -908,7 +1046,20 @@ export class Game {
     const a = p.zoomed ? this.yaw : Math.atan2(ay - myp, ax - mxp) + (Math.random() - 0.5) * 2 * w.spread
     const dx = Math.cos(a)
     const dy = Math.sin(a)
+    const vPitch = -this.pitch
+    const sinV = Math.sin(vPitch)
+    const startZ = gz + (p.zoomed ? 36 : 29)
+
     let bestD = rayDistance(this.grid, this.extra, mxp, myp, dx, dy, SNIPER.range)
+    if (sinV < -0.01) {
+      const floorD = (startZ - gz) / -sinV
+      if (floorD > 0 && floorD < bestD) bestD = floorD
+    }
+    if (mxp < ZC_END + 40 && sinV > 0.01) {
+      const ceilD = (ROOM_H - startZ) / sinV
+      if (ceilD > 0 && ceilD < bestD) bestD = ceilD
+    }
+
     let hitKind: 'wall' | 'enemy' | 'imp' | 'turret' | 'gen' = 'wall'
     let hitEnemy: Enemy | null = null
     let hitTurret: Turret | null = null
@@ -930,9 +1081,14 @@ export class Game {
       if (e.state === 'dead') continue
       const hd = testCircle(e.x, e.y, e.r + 5)
       if (hd >= 0 && hd < bestD) {
-        bestD = hd
-        hitKind = 'enemy'
-        hitEnemy = e
+        const hitZ = startZ + sinV * hd
+        const egZ = this.world.heightAt(e.x, e.y)
+        const def = ALIENS[e.kind]
+        if (hitZ >= egZ - 8 && hitZ <= egZ + def.height + 10) {
+          bestD = hd
+          hitKind = 'enemy'
+          hitEnemy = e
+        }
       }
     }
     const im = this.imp
@@ -966,6 +1122,7 @@ export class Game {
 
     const endX = mxp + dx * bestD
     const endY = myp + dy * bestD
+    const endZ = Math.max(0, startZ + sinV * bestD)
     const close = bestD < SNIPER.closeRange
     if (hitKind === 'enemy' && hitEnemy) {
       const dmg = close ? (hitEnemy.kind === 'boss' ? SNIPER.bossCloseDmg : hitEnemy.hp + 1) : w.dmg
@@ -978,12 +1135,10 @@ export class Game {
       this.damageGen(hitGen, w.dmg)
     }
 
-    // Bala de luz (haz luminoso con núcleo brillante)
-    const startZ = gz + (p.zoomed ? 36 : 29)
-    const endZ = hitKind === 'enemy' && hitEnemy ? ALIENS[hitEnemy.kind].height * 0.55 : 26
     const midX = (mxp + endX) * 0.5
-    const midY = (myp + endY) * 0.5
-    const midZ = (startZ + endZ) * 0.5
+    const midY = (startZ + endZ) * 0.5
+    const midZ = (myp + endY) * 0.5
+    const beamLen = Math.hypot(endX - mxp, endZ - startZ, endY - myp)
     const beamMat = new THREE.MeshBasicMaterial({
       color: 0xfff6b0,
       transparent: true,
@@ -992,9 +1147,10 @@ export class Game {
       blending: THREE.AdditiveBlending,
     })
     const beam = new THREE.Mesh(bulletGeo, beamMat)
-    beam.scale.set(Math.max(8, bestD), 3.4, 3.4)
-    beam.position.set(midX, midZ, midY)
-    beam.rotation.y = -a
+    beam.scale.set(Math.max(8, beamLen), 3.4, 3.4)
+    beam.position.set(midX, midY, midZ)
+    const dirVec = new THREE.Vector3(endX - mxp, endZ - startZ, endY - myp).normalize()
+    beam.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dirVec)
     this.projG.add(beam)
     this.beams.push({ mesh: beam, t: 0, max: 0.22 })
 
@@ -1150,17 +1306,21 @@ export class Game {
 
   private explodeGrenade(g: Grenade): void {
     const { x, y } = g
+    achievements.add('grenade')
     const direct = g.stuck && g.stuck.type === 'enemy' ? g.stuck.e : null
     for (const e of [...this.enemies]) {
       if (e.state === 'dead') continue
       const d = Math.max(0, Math.hypot(e.x - x, e.y - y) - e.r * 0.5)
       const f = e === direct ? 1 : this.blastFalloff(d)
-      if (f > 0) this.damageEnemy(e, e.maxHp * f)
+      if (f > 0) {
+        const dmg = e.kind === 'boss' ? e.maxHp * BOSS_GRENADE_FRAC * f : e.maxHp * f
+        this.damageEnemy(e, dmg)
+      }
     }
     const im = this.imp
     if (im.state === 'chase' || im.state === 'forming') {
       const f = g.stuck && g.stuck.type === 'imp' ? 1 : this.blastFalloff(Math.max(0, Math.hypot(im.x - x, im.y - y) - im.r * 0.5))
-      if (f > 0) this.damageImpostor(IMPOSTOR_HP * f)
+      if (f > 0) this.damageImpostor(IMPOSTOR_HP * BOSS_GRENADE_FRAC * f)
     }
     for (const t of this.turrets) {
       if (t.state === 'dead') continue
@@ -1206,7 +1366,11 @@ export class Game {
     return !this.buggy.riding && Math.hypot(this.p.x - this.buggy.x, this.p.y - this.buggy.y) < 80
   }
   private nearShip(): boolean {
-    return !this.buggy.riding && Math.hypot(this.p.x - SHIP.x, this.p.y - SHIP.y) < 200
+    return !this.buggy.riding && Math.hypot(this.p.x - SHIP.x, this.p.y - SHIP.y) < 220
+  }
+  private nearLever(): boolean {
+    if (this.buggy.riding) return false
+    return Math.hypot(this.p.x - this.world.lever.x, this.p.y - this.world.lever.y) < 65
   }
 
   private interact(): void {
@@ -1215,19 +1379,28 @@ export class Game {
     const p = this.p
     // texto de ayuda contextual
     let prompt = ''
-    if (b.riding) prompt = Math.abs(b.v) < 150 ? 'E · Bajar del buggy' : ''
+    if (b.riding) prompt = 'E · Bajar del buggy'
+    else if (!this.flags.leverPulled && this.nearLever()) prompt = 'E · Tirar de la palanca'
     else if (this.nearBuggy() && this.flags.impDead) prompt = 'E · Subir al buggy'
-    else if (this.nearShip()) prompt = this.flags.bossDead ? 'E · ¡Abordar la nave!' : 'Escudo activo: derrota al jefe impostor'
+    else if (this.nearShip()) {
+      if (!this.flags.bossDead) prompt = 'Escudo activo: derrota al jefe impostor'
+      else if (p.fuelPlaced < 3) {
+        prompt = p.fuelCarried > 0
+          ? `E · Cargar combustible (${p.fuelPlaced + 1}/3 piedras)`
+          : `Cohete sin combustible: faltan ${3 - p.fuelPlaced} piedras ignífugas`
+      } else prompt = 'E · ¡Despegar en el cohete!'
+    }
     this.hud.prompt(prompt)
     if (!used) return
 
     if (b.riding) {
-      if (Math.abs(b.v) >= 150) return
-      // bajar a un costado libre del buggy
+      // bajar a cualquier velocidad con transferencia de impulso
+      const fwdX = Math.cos(b.h)
+      const fwdY = Math.sin(b.h)
       const rx = -Math.sin(b.h)
       const ry = Math.cos(b.h)
       for (const side of [1, -1, 0]) {
-        const c = { x: b.x + rx * 46 * side - Math.cos(b.h) * (side === 0 ? 46 : 0), y: b.y + ry * 46 * side - Math.sin(b.h) * (side === 0 ? 46 : 0), r: p.r }
+        const c = { x: b.x + rx * 46 * side - fwdX * (side === 0 ? 46 : 0), y: b.y + ry * 46 * side - fwdY * (side === 0 ? 46 : 0), r: p.r }
         const hits = this.grid.query(c.x - 20, c.y - 20, c.x + 20, c.y + 20, []).some(r => c.x > r.x - c.r && c.x < r.x + r.w + c.r && c.y > r.y - c.r && c.y < r.y + r.h + c.r)
         if (!hits || side === 0) {
           p.x = c.x
@@ -1235,35 +1408,64 @@ export class Game {
           break
         }
       }
+      p.kx = fwdX * b.v * 0.45
+      p.ky = fwdY * b.v * 0.45
       b.riding = false
-      b.v = 0
       engineSet(false, 0)
       sfx.door()
       this.hud.caption('A pie: explora las ruinas', 1600)
       return
     }
+
+    if (!this.flags.leverPulled && this.nearLever()) {
+      this.flags.leverPulled = true
+      this.world.lever.arm.rotation.x = -0.5
+      this.world.lever.lamp.color.setHex(0x3bff8a)
+      this.world.endWall.on = false
+      this.world.endWallMesh.visible = false
+      if (this.leverArrowM) this.leverArrowM.visible = false
+      sfx.lever()
+      this.shake = 4
+      this.hud.caption('¡Portón exterior abierto!', 2200)
+      achievements.add('lever')
+      return
+    }
+
     if (this.nearBuggy() && this.flags.impDead) {
       b.riding = true
       b.v = 0
       engineSet(true, 0)
       sfx.door()
+      achievements.add('buggy')
       if (!this.flags.boarded) {
         this.flags.boarded = true
         b.boarded = true
-        this.world.endWall.on = false
-        this.world.endWallMesh.visible = false
-        this.hud.caption('4. ¡Misión de supervivencia!', 3200)
-        this.say('El mundo se abre ante ti. Hay una nave de escape en algún lugar al este… con combustible sólo para el planeta más cercano.', 1.5)
-        this.say('Explora ruinas, busca armas y botiquines. Y cuidado con las torretas.', 9)
-        this.shake = 8
+        this.hud.caption('¡Buggy asegurado!', 2200)
       }
       return
     }
+
     if (this.nearShip()) {
-      if (this.flags.bossDead) this.launch()
-      else {
+      if (!this.flags.bossDead) {
         this.hud.caption('¡Escudo activo!', 1600)
         sfx.hit()
+      } else if (p.fuelPlaced < 3) {
+        if (p.fuelCarried > 0) {
+          p.fuelCarried--
+          p.fuelPlaced++
+          this.hud.setFuel(p.fuelCarried, p.fuelPlaced, 3)
+          sfx.pickup()
+          this.hud.caption(`¡Combustible cargado! (${p.fuelPlaced}/3)`, 2000)
+          if (p.fuelPlaced >= 3) {
+            achievements.add('fuel', 3)
+            this.hud.caption('¡Cohete listo para el despegue!', 3000)
+          }
+        } else {
+          this.hud.caption('Busca las piedras ignífugas en el planeta', 2000)
+        }
+      } else {
+        achievements.completeRun(this.difficulty)
+        this.launch()
       }
     }
   }
@@ -1468,10 +1670,22 @@ export class Game {
       sfx.kill()
       this.flags.impDead = true
       this.stats.kills++
+      achievements.add('impostor')
       this.hud.caption('El escape', 2400)
       this.dropPickup('medkit', e.x, e.y + 30)
       this.say('El impostor cayó. Hay un buggy al final del pasillo: úsalo (E).', 2)
     }
+  }
+
+  private checkArmory(): void {
+    const p = this.p
+    let c = 0
+    if (p.owned.pistol) c++
+    if (p.owned.rifle) c++
+    if (p.owned.shotgun) c++
+    if (p.owned.sniper) c++
+    if (p.hasGrenade) c++
+    achievements.set('armory', c)
   }
 
   // ================= Recolección =================
@@ -1479,6 +1693,24 @@ export class Game {
     const p = this.p
     const reach = this.buggy.riding ? 50 : 32
     const pz = this.world.heightAt(p.x, p.y)
+
+    for (const f of this.fuels) {
+      if (f.taken) continue
+      if (Math.hypot(p.x - f.x, p.y - f.y) < reach && Math.abs(pz - f.z) < 32) {
+        f.taken = true
+        f.mesh.visible = false
+        p.fuelCarried++
+        this.hud.setFuel(p.fuelCarried, p.fuelPlaced, 3)
+        achievements.add('fuel')
+        sfx.pickup()
+        this.fx.burst(f.x, f.y, 22, 0xff7722, 180, 0.6, 4, f.z + 10)
+        this.hud.caption(`¡Piedra ignífuga obtenida! (${p.fuelCarried + p.fuelPlaced}/3)`, 2600)
+        if (p.fuelCarried + p.fuelPlaced >= 3) {
+          this.say('Ya tengo las 3 piedras ignífugas. Ahora al cohete de escape.', 0.5)
+        }
+      }
+    }
+
     for (const k of this.pickups) {
       if (k.taken) continue
       if (Math.abs(pz - k.z) > 28) continue
@@ -1505,11 +1737,14 @@ export class Game {
           if (!p.hasGrenade) this.hud.caption('¡Granadas de plasma!  (tecla G)', 2400)
           else this.hud.caption('+ 2 granadas de plasma', 1200)
           p.hasGrenade = true
+          this.checkArmory()
           sfx.pickup()
           break
         case 'pistol':
           p.owned.pistol = true
           p.weapon = 'pistol'
+          achievements.add('pistol')
+          this.checkArmory()
           sfx.pickup()
           this.hud.caption('Pistola láser', 1800)
           if (!this.flags.pistolMsg) {
@@ -1523,6 +1758,9 @@ export class Game {
           p.owned[k.kind] = true
           p.ammo[k.kind] = Math.min(wp.maxAmmo, p.ammo[k.kind] + (had ? Math.ceil(wp.pickupAmmo / 2) : wp.pickupAmmo))
           if (!had) p.weapon = k.kind
+          if (k.kind === 'shotgun') achievements.add('shotgun')
+          else achievements.add('otherWeapon')
+          this.checkArmory()
           sfx.pickup()
           this.hud.caption(k.kind === 'rifle' ? '¡Rifle de asalto!  (tecla 2)' : '¡Escopeta!  (tecla 3)', 2200)
           break
@@ -1532,6 +1770,8 @@ export class Game {
           p.owned.sniper = true
           p.ammo.sniper = Math.min(WEAPONS.sniper.maxAmmo, p.ammo.sniper + (had ? Math.ceil(WEAPONS.sniper.pickupAmmo / 2) : WEAPONS.sniper.pickupAmmo))
           if (!had) p.weapon = 'sniper'
+          achievements.add('otherWeapon')
+          this.checkArmory()
           sfx.pickup()
           this.hud.caption('¡Francotirador!  (tecla 4 · Z mira)', 2600)
           break
@@ -1552,6 +1792,7 @@ export class Game {
         l.taken = true
         this.stats.lego++
         this.hud.setLego(this.stats.lego, true)
+        achievements.add('legos')
         this.hud.caption(`¡Pieza curiosa de LEGO!  ${this.stats.lego}/${LEGO_TOTAL}`, 1800)
         sfx.lego()
         this.fx.burst(l.x, l.y, 26, 0xffe98a, 220, 0.8, 3.5, 20)
@@ -1573,6 +1814,7 @@ export class Game {
       this.setBeacon(b, true)
       this.cp = { x: b.x, y: b.y + 56, name: b.name }
       p.hp = Math.min(MAX_HP, p.hp + 30)
+      achievements.add('beacon')
       sfx.checkpoint()
       this.hud.caption('Punto de control', 1800)
       this.say(`${b.name} activada. Si caes, volverás aquí.`, 0.3)
@@ -1586,6 +1828,7 @@ export class Game {
       if (s.visited || p.x < s.x || p.x > s.x + s.w || p.y < s.y || p.y > s.y + s.d) continue
       s.visited = true
       this.stats.ruins++
+      achievements.add('ruins')
       this.hud.caption(s.name, 1700)
       if (s.id === 'hangar' && !this.flags.hangarMsg) {
         this.flags.hangarMsg = true
@@ -1596,10 +1839,19 @@ export class Game {
         this.say('¡Ahí está la nave! Y algo gigantesco la custodia…', 0.6)
       }
     }
+    for (const c of this.world.camps) {
+      if (c.visited || !c.name || Math.hypot(p.x - c.x, p.y - c.y) > c.spread) continue
+      c.visited = true
+      achievements.add('camps')
+      this.hud.caption(c.name, 1700)
+    }
+    if (p.x > ARENA.x - 200 || this.inArena(p.x, p.y)) {
+      achievements.add('bossReach')
+    }
     if (!this.flags.towerMsg && Math.hypot(p.x - this.world.tower.x, p.y - this.world.tower.y) < 130) {
       this.flags.towerMsg = true
       this.say('Intento transmitir desde la torre… sólo estática. La estación sigue sin responder.', 0.3)
-      sfx.radio()
+      sfx.thought()
     }
     if (!this.flags.shipHint && p.x > ARENA.x - 500) {
       this.flags.shipHint = true
@@ -1760,6 +2012,7 @@ export class Game {
     this.deadT = 0
     this.deadShown = false
     this.stats.deaths++
+    achievements.add('deaths')
     if (this.buggy.riding) {
       this.buggy.riding = false
       this.buggy.v = 0
@@ -1907,6 +2160,14 @@ export class Game {
     e.wind = null
     e.charging = 0
     this.stats.kills++
+    achievements.add('kills100')
+    if (this.p.weapon === 'shotgun') achievements.add('shotgunKills')
+    else if (this.p.weapon === 'sniper') achievements.add('sniperKills')
+    else achievements.add('otherKills')
+    if (e.roam && this.hordeCount > 0) {
+      this.hordeCount--
+      if (this.hordeCount <= 0) achievements.add('wave')
+    }
     const def = ALIENS[e.kind]
     const col = parseInt(def.color.slice(1), 16)
     this.fx.burst(e.x, e.y, e.kind === 'boss' ? 70 : e.kind === 'tank' ? 30 : 14, col, e.kind === 'boss' ? 320 : 200, 0.8, e.kind === 'boss' ? 6 : 4, 24)
@@ -1920,8 +2181,9 @@ export class Game {
     bone.scale.setScalar(e.kind === 'boss' ? 3 : e.kind === 'tank' ? 1.6 : 1)
     this.dyn.add(bone)
     this.bones.push({ mesh: bone, t: 0 })
-    // botín
-    const r = Math.random()
+    // botín (modificado por dificultad)
+    const dropMul = Math.max(0.1, this.diff.drops)
+    const r = Math.random() / dropMul
     if (e.kind === 'soldier') {
       if (r < 0.07) this.dropPickup('medkit', e.x, e.y)
       else if (r < 0.17) this.dropPickup('ammo', e.x, e.y)
@@ -1933,6 +2195,7 @@ export class Game {
       if (r < 0.7) this.dropPickup('ammo', e.x + 20, e.y)
     } else if (e.kind === 'boss') {
       this.flags.bossDead = true
+      achievements.add('boss')
       this.shield.visible = false
       this.shake = 20
       this.hud.boss(null)
@@ -2032,7 +2295,10 @@ export class Game {
         this.shake = Math.max(this.shake, 7)
         sfx.slam()
         this.damageEnemy(e, dmg)
-        if ((e.state as string) === 'dead') continue
+        if ((e.state as string) === 'dead') {
+          achievements.add('roadkill')
+          continue
+        }
       }
       e.hitCar = Math.max(0, e.hitCar - dt)
       if (e.state === 'idle') {
@@ -2261,9 +2527,11 @@ export class Game {
     const dist = rnd(850, 1100)
     const cx = clamp(p.x + Math.cos(a0) * dist, WORLD.x0 + 200, ARENA.x - 300)
     const cy = clamp(p.y + Math.sin(a0) * dist, WORLD.y0 + 150, WORLD.y1 - 150)
-    for (let i = 0; i < n; i++) this.mkRoamer('soldier', cx + rnd(-90, 90), cy + rnd(-90, 90))
-    if (progress > 0.2) for (let i = 0; i < 1 + Math.floor(progress * 2.5); i++) this.mkRoamer('shooter', cx + rnd(-110, 110), cy + rnd(-110, 110))
-    if (progress > 0.5 && Math.random() < 0.4) this.mkRoamer('tank', cx, cy)
+    let spawned = 0
+    for (let i = 0; i < n; i++) { this.mkRoamer('soldier', cx + rnd(-90, 90), cy + rnd(-90, 90)); spawned++ }
+    if (progress > 0.2) for (let i = 0; i < 1 + Math.floor(progress * 2.5); i++) { this.mkRoamer('shooter', cx + rnd(-110, 110), cy + rnd(-110, 110)); spawned++ }
+    if (progress > 0.5 && Math.random() < 0.4) { this.mkRoamer('tank', cx, cy); spawned++ }
+    this.hordeCount += spawned
     if (!this.flags.hordeMsg) {
       this.flags.hordeMsg = true
       this.hud.caption('¡UNA HORDA SE ACERCA!', 2400)
@@ -2291,13 +2559,25 @@ export class Game {
       const b = this.bullets[i]
       let dead = false
       b.life -= dt
-      const steps = Math.ceil((b.speed * dt) / 8)
+      const steps = Math.max(1, Math.ceil((b.speed * dt) / 8))
       for (let k = 0; k < steps && !dead; k++) {
         b.x += (b.vx * dt) / steps
         b.y += (b.vy * dt) / steps
+        b.z += (b.vz * dt) / steps
+        const gz = this.world.heightAt(b.x, b.y)
+        if (b.z <= gz) {
+          dead = true
+          this.fx.burst(b.x, b.y, 4, 0xffe27a, 100, 0.18, 2.2, gz + 2)
+          break
+        }
+        if (b.x < ZC_END + 40 && b.z >= ROOM_H) {
+          dead = true
+          this.fx.burst(b.x, b.y, 4, 0xffe27a, 100, 0.18, 2.2, b.z)
+          break
+        }
         if (this.solidAt(b.x, b.y)) {
           dead = true
-          this.fx.burst(b.x, b.y, 4, 0xffe27a, 100, 0.18, 2.2, 28)
+          this.fx.burst(b.x, b.y, 4, 0xffe27a, 100, 0.18, 2.2, b.z)
           break
         }
         for (const e of this.enemies) {
@@ -2306,9 +2586,13 @@ export class Game {
           const dy = b.y - e.y
           if (dx > e.r + 6 || dx < -e.r - 6 || dy > e.r + 6 || dy < -e.r - 6) continue
           if (dx * dx + dy * dy < (e.r + 4) * (e.r + 4)) {
-            dead = true
-            this.damageEnemy(e, b.dmg)
-            break
+            const def = ALIENS[e.kind]
+            const egZ = this.world.heightAt(e.x, e.y)
+            if (b.z >= egZ - 6 && b.z <= egZ + def.height + 8) {
+              dead = true
+              this.damageEnemy(e, b.dmg)
+              break
+            }
           }
         }
         if (dead) break
@@ -2334,7 +2618,7 @@ export class Game {
           }
         }
       }
-      b.mesh.position.set(b.x, 28, b.y)
+      b.mesh.position.set(b.x, b.z, b.y)
       if (dead || b.life <= 0) {
         this.projG.remove(b.mesh)
         this.bullets.splice(i, 1)
@@ -2491,12 +2775,30 @@ export class Game {
       ring.rotation.y += dt * 1.5
     }
 
+    // piedras ignífugas
+    for (const f of this.fuels) {
+      f.mesh.visible = !f.taken
+      if (!f.taken) {
+        f.mesh.position.y = f.z + 10 + Math.sin(this.t * 2.8 + f.ph) * 3
+        f.mesh.rotation.y = this.t * 1.5 + f.ph
+      }
+    }
+    // flecha de la palanca
+    if (this.leverArrowM) {
+      this.leverArrowM.visible = !this.flags.leverPulled
+      if (this.leverArrowM.visible) {
+        this.leverArrowM.position.y = 38 + Math.sin(this.t * 4) * 2.5
+      }
+    }
+
     // jugador
     const rig = this.playerM.userData as PlayerRig
     const flick = p.inv > 0 && Math.floor(this.t * 18) % 2 === 0 && !riding && this.mode === 'play'
     const inScope = p.zoomed && !riding && p.alive && this.mode === 'play'
-    this.playerM.visible = p.alive && !ending && !flick && !inScope
     const gz = W.heightAt(p.x, p.y)
+    const camDist = this.camera.position.distanceTo(this.tmpV.set(p.x, gz + 20, p.y))
+    const tooClose = !riding && camDist < 42
+    this.playerM.visible = p.alive && !ending && !flick && !inScope && !tooClose
     if (riding) {
       this.playerM.position.set(b.x - Math.cos(b.h) * 8, 12, b.y - Math.sin(b.h) * 8)
       this.playerM.rotation.y = -b.h
@@ -2588,7 +2890,6 @@ export class Game {
       const anyGun = p.owned.pistol || p.owned.rifle || p.owned.shotgun || p.owned.sniper
       this.hud.setWeapons(p.owned, p.ammo, p.weapon, anyGun, p.hasGrenade, p.grenades)
       this.hud.setStamina(p.stamina, STAMINA.max, p.exhausted)
-      this.hud.speed(riding ? `${Math.round(Math.abs(b.v) * 0.36)} km/h` : '')
       const boss = this.enemies.find(e => e.kind === 'boss' && e.state === 'chase')
       if (this.mode === 'play' && boss) this.hud.boss('Jefe Impostor', boss.hp / boss.maxHp)
       else if (this.mode === 'play' && im.state === 'chase') this.hud.boss('Impostor', im.hp / IMPOSTOR_HP)
@@ -2725,7 +3026,7 @@ export class Game {
 
     // Colisión adaptable de cámara de 3ª persona contra construcciones, muros y puertas
     let bestT = 1
-    const pad = 7
+    const pad = 14
     const checkRect = (r: Rect): void => {
       if (r.on === false) return
       const rTop = r.top ?? WALL_H
@@ -2755,7 +3056,7 @@ export class Game {
     this.camPos.z = lerp(this.camPos.z, tz, k)
     const sk = this.shake * 0.35
     cam.position.set(this.camPos.x + (sk ? rnd(-sk, sk) : 0), this.camPos.y + (sk ? rnd(-sk, sk) : 0), this.camPos.z + (sk ? rnd(-sk, sk) : 0))
-    cam.lookAt(pivX + fx * 260, pivY - sp * 60 + 8, pivZ + fz * 260)
+    cam.lookAt(pivX + fx * 260, pivY - sp * 240 + 8, pivZ + fz * 260)
     this.world.sky.position.copy(cam.position)
   }
 
@@ -2778,47 +3079,6 @@ export class Game {
     if (this.flags.boarded) dots.push({ x: SHIP.x, y: SHIP.y, kind: 'ship' })
     if (!this.buggy.riding) dots.push({ x: this.buggy.x, y: this.buggy.y, kind: 'buggy' })
     return dots
-  }
-
-  /** Estado resumido para pruebas automáticas (sólo con ?debug en la URL). */
-  snapshot(): Record<string, unknown> {
-    const p = this.p
-    return {
-      mode: this.mode,
-      x: Math.round(p.x),
-      y: Math.round(p.y),
-      hp: Math.round(p.hp),
-      weapon: p.weapon,
-      owned: p.owned,
-      ammo: p.ammo,
-      riding: this.buggy.riding,
-      boarded: this.flags.boarded,
-      impDead: this.flags.impDead,
-      bossDead: this.flags.bossDead,
-      enemies: this.enemies.filter(e => e.state !== 'dead').length,
-      chasing: this.enemies.filter(e => e.state === 'chase').length,
-      stats: this.stats,
-      lego: this.legos.filter(l => l.taken).length,
-      cause: this.lastCause,
-    }
-  }
-
-  /** Atajos para pruebas (sólo con ?debug). */
-  debug = {
-    tp: (x: number, y: number) => {
-      this.p.x = x
-      this.p.y = y
-      if (this.buggy.riding) { this.buggy.x = x; this.buggy.y = y }
-    },
-    give: () => {
-      this.p.owned = { pistol: true, rifle: true, shotgun: true, sniper: true }
-      this.p.ammo = { rifle: 300, shotgun: 48, sniper: 12 }
-    },
-    god: (on: boolean) => { this.p.inv = on ? 1e9 : 0 },
-    killImp: () => { this.imp.state === 'dormant' && (this.imp.state = 'chase'); this.damageImpostor(9999) },
-    boardBuggy: () => { this.flags.impDead = true; this.imp.state = 'dead'; this.d1 = this.d2 = 1; this.buggy.x = this.p.x + 20; this.buggy.y = this.p.y },
-    killBoss: () => { const b = this.enemies.find(e => e.kind === 'boss'); if (b) this.damageEnemy(b, 99999) },
-    yaw: (v: number) => { this.yaw = v },
   }
 }
 

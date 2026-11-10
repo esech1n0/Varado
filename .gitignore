@@ -1,11 +1,9 @@
 node_modules/
 dist/
 shots/
-.manus-webdev/
-manus-starter-init.json
-gitignore.txt
 .env
 .env.*
 *.local
+*.zip
 .DS_Store
 Thumbs.db

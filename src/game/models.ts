@@ -3,16 +3,17 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { ball, box, cyl } from './gfx'
 import { seeded } from './geom'
 
-export type ModelKey = 'soldier' | 'shooter' | 'tank' | 'boss' | 'ship' | 'wreck'
+export type ModelKey = 'soldier' | 'shooter' | 'tank' | 'boss' | 'wreck'
 
 // Modelos generados con IA (Tripo, modo Rápido). Cada uno mira hacia +X, como la simulación.
+// Rutas relativas a la página: funcionan en itch.io (subruta) y en desarrollo.
+const BASE = import.meta.env.BASE_URL
 const URLS: Record<ModelKey, string> = {
-  soldier: import.meta.env.DEV ? '/assets/models/alien_soldier.glb' : '/manus-storage/game/sha256/94a376691291feeabe213e80af409df482504c0d28475792cac3d718f2f02b4e.glb',
-  shooter: import.meta.env.DEV ? '/assets/models/alien_shooter.glb' : '/manus-storage/game/sha256/b3c9a41f7b6410dcecde39f51460ac7e6565f574041e7224ad762a39e0ae58db.glb',
-  tank: import.meta.env.DEV ? '/assets/models/alien_tank.glb' : '/manus-storage/game/sha256/c09e75d66c02a6b850f88b426332f5b1d1a7dc2fe5d50ceccb758e98a6200b28.glb',
-  boss: import.meta.env.DEV ? '/assets/models/alien_boss.glb' : '/manus-storage/game/sha256/19192bd6630c35382a5a115f03420c7c79bbe1b29c40cd09021855589f1d4fc7.glb',
-  ship: import.meta.env.DEV ? '/assets/models/escape_ship.glb' : '/manus-storage/game/sha256/93089270eaa51784c957ba369aea2f47923f8103ef807e5259034b7d62a10283.glb',
-  wreck: import.meta.env.DEV ? '/assets/models/wreck_ship.glb' : '/manus-storage/game/sha256/d4f06ecced0dc45ba0d56ceb578334477088a3da49e950a48dedd31b7b86c624.glb',
+  soldier: `${BASE}models/alien_soldier.glb`,
+  shooter: `${BASE}models/alien_shooter.glb`,
+  tank: `${BASE}models/alien_tank.glb`,
+  boss: `${BASE}models/alien_boss.glb`,
+  wreck: `${BASE}models/wreck_ship.glb`,
 }
 
 const protos = new Map<ModelKey, THREE.Object3D>()

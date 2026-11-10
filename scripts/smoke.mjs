@@ -1,6 +1,6 @@
-// End-to-end smoke test: builds must already exist in dist/ (`npm run build`).
-// Serves dist/, boots the game in headless Chromium, plays a few seconds, walks the menus in
-// English and Chinese, fails on any console error, and writes screenshots to ./shots/.
+// End-to-end smoke test for Varado.
+// Serves dist/ via vite preview, launches headless browser, checks main menu,
+// menus navigation, difficulty selection, gameplay HUD, and pause.
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -12,7 +12,7 @@ mkdirSync(out, { recursive: true })
 
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--port', String(port), '--strictPort', '--host', '127.0.0.1'], { stdio: 'ignore', detached: false })
 let browser
-const guard = setTimeout(() => fail('timed out'), 120_000)
+const guard = setTimeout(() => fail('timed out after 60s'), 60_000)
 
 function cleanup() {
   clearTimeout(guard)
@@ -35,113 +35,90 @@ async function waitForServer() {
   throw new Error('preview server did not start')
 }
 
-async function openGame(context, errors) {
-  const page = await context.newPage()
-  page.on('console', m => m.type() === 'error' && errors.push(m.text()))
-  page.on('pageerror', e => errors.push(String(e)))
-  page.on('response', r => r.status() >= 400 && errors.push(`HTTP ${r.status()} ${r.url()}`))
-  await page.goto(url)
-  await page.waitForSelector('[data-screen="title"].is-active', { timeout: 30_000 })
-  await page.evaluate(async () => {
-    await document.fonts.ready
-    const expected = document.documentElement.lang === 'zh-CN' ? 'ManusCC0 Sans CJK SC' : 'ManusCC0'
-    for (const selector of ['.logo-text', '.tagline']) {
-      const family = getComputedStyle(document.querySelector(selector)).fontFamily
-      if (!family.startsWith(`"${expected}"`) && !family.startsWith(expected + ',')) {
-        throw new Error(`Unexpected game font: ${family}`)
-      }
-    }
-    if (![...document.fonts].some(face => face.family.replaceAll('"', '').replaceAll("'", '') === expected && face.status === 'loaded')) {
-      throw new Error(`Bundled font did not load: ${expected}`)
-    }
-  })
-  await page.waitForTimeout(900)
-  return page
-}
-
-const state = page => page.evaluate(() => {
-  const { game } = window.__game
-  const p = game['player'].root.position
-  return { mode: game.mode, run: game.run, pos: { x: p.x, y: p.y, z: p.z } }
-})
-
 try {
   await waitForServer()
-  // Prefer Playwright's bundled Chromium; fall back to an installed Google Chrome.
-  const args = ['--ignore-gpu-blocklist']
+  const args = ['--ignore-gpu-blocklist', '--use-gl=angle', '--use-angle=swiftshader']
   browser = await chromium.launch({ args }).catch(() => chromium.launch({ args, channel: 'chrome' }))
   const errors = []
 
-  const en = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US' })
-  const page = await openGame(en, errors)
-  await page.screenshot({ path: `${out}/01-title-en.png` })
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } })
+  const page = await context.newPage()
 
-  await page.click('[data-action="play"]')
-  await page.waitForSelector('[data-screen="hud"].is-active')
-  const before = await state(page)
-  await page.keyboard.down('KeyW')
-  await page.waitForTimeout(700)
-  await page.keyboard.press('Space')
-  await page.waitForTimeout(900)
-  await page.keyboard.up('KeyW')
-  await page.waitForTimeout(600)
-  await page.screenshot({ path: `${out}/02-gameplay.png` })
-  const after = await state(page)
-  const moved = Math.hypot(after.pos.x - before.pos.x, after.pos.z - before.pos.z)
-  if (after.mode !== 'playing') throw new Error(`expected playing, got ${after.mode}`)
-  if (!(after.run.timeLeft < before.run.timeLeft)) throw new Error('clock did not run')
-  if (moved < 2) throw new Error(`player barely moved (${moved.toFixed(2)} m)`)
-  console.log(`smoke: moved ${moved.toFixed(1)} m, clock ${after.run.timeLeft.toFixed(1)} s`)
-
-  await page.keyboard.press('Escape')
-  await page.waitForSelector('[data-screen="pause"].is-active')
-  await page.waitForTimeout(400)
-  await page.screenshot({ path: `${out}/03-pause.png` })
-  await page.click('[data-screen="pause"] [data-action="settings"]')
-  await page.waitForSelector('[data-screen="settings"].is-active')
-  await page.waitForTimeout(400)
-  await page.screenshot({ path: `${out}/04-settings.png` })
-  await page.keyboard.press('Escape')
-  await page.waitForSelector('[data-screen="pause"].is-active')
-  await page.waitForTimeout(300)
-  if ((await state(page)).mode !== 'paused') throw new Error('leaving Settings with Escape resumed the run')
-
-  // Results: finish the run through the real rules by collecting the remaining cores.
-  await page.evaluate(() => {
-    const { game } = window.__game
-    const cores = game['cores']
-    game.resume()
-    for (const p of cores.remaining()) {
-      game['player'].teleport(p)
-      game.step(1 / 60)
+  page.on('console', m => {
+    if (m.type() === 'error') {
+      console.warn('Browser console error:', m.text())
+      errors.push(m.text())
     }
   })
-  await page.waitForSelector('[data-screen="results"].is-active', { timeout: 10_000 })
-  await page.waitForTimeout(1500)
-  await page.screenshot({ path: `${out}/05-results.png` })
-  const done = await state(page)
-  if (done.run.phase !== 'won') throw new Error(`expected a won run, got ${done.run.phase}`)
-  await en.close()
+  page.on('pageerror', e => {
+    console.warn('Browser page error:', e)
+    errors.push(String(e))
+  })
+  page.on('response', r => {
+    if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`)
+  })
 
-  const zh = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'zh-CN' })
-  const zhPage = await openGame(zh, errors)
-  const lang = await zhPage.evaluate(() => document.documentElement.lang)
-  if (lang !== 'zh-CN') throw new Error(`browser language not detected (lang=${lang})`)
-  await zhPage.screenshot({ path: `${out}/06-title-zh.png` })
-  await zh.close()
+  console.log('smoke: navigating to', url)
+  await page.goto(url)
+  await page.waitForSelector('#ovl-start:not(.hidden)', { timeout: 15_000 })
+  await page.waitForSelector('#btn-play:not([disabled])', { timeout: 20_000 })
+  await page.screenshot({ path: `${out}/01-main-menu.png` })
+  console.log('smoke: main menu ready')
 
-  const phone = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'zh-CN' })
-  const phonePage = await openGame(phone, errors)
-  await phonePage.tap('[data-action="play"]')
-  await phonePage.waitForSelector('[data-screen="hud"].is-active')
-  await phonePage.waitForTimeout(1200)
-  await phonePage.screenshot({ path: `${out}/07-phone-hud.png` })
-  await phone.close()
+  // Check achievements modal
+  await page.click('#btn-menu-ach')
+  await page.waitForSelector('#ovl-ach:not(.hidden)')
+  const achCount = await page.locator('.ach').count()
+  if (achCount < 20) throw new Error(`expected >= 20 achievements rendered, got ${achCount}`)
+  await page.screenshot({ path: `${out}/02-achievements.png` })
+  await page.click('#btn-ach-back')
+  await page.waitForSelector('#ovl-ach', { state: 'hidden' })
+  console.log(`smoke: achievements modal verified (${achCount} achievements)`)
 
-  if (errors.length) throw new Error(`console errors:\n  ${errors.join('\n  ')}`)
+  // Check settings modal
+  await page.click('#btn-menu-settings')
+  await page.waitForSelector('#ovl-settings:not(.hidden)')
+  await page.screenshot({ path: `${out}/03-settings.png` })
+  await page.click('#btn-settings-back')
+  await page.waitForSelector('#ovl-settings', { state: 'hidden' })
+  console.log('smoke: settings modal verified')
+
+  // Click JUGAR to open difficulty selection
+  await page.click('#btn-play')
+  await page.waitForSelector('#ovl-diff:not(.hidden)')
+  await page.screenshot({ path: `${out}/04-difficulty.png` })
+  console.log('smoke: difficulty modal verified')
+
+  // Select Normal difficulty
+  await page.click('button[data-diff="normal"]')
+  await page.waitForSelector('#hud:not(.hidden)', { timeout: 10_000 })
+  console.log('smoke: HUD active')
+
+  // Simulate gameplay input
+  await page.keyboard.down('KeyW')
+  await page.waitForTimeout(600)
+  await page.keyboard.up('KeyW')
+  await page.screenshot({ path: `${out}/05-gameplay.png` })
+
+  // Pause
+  await page.keyboard.press('KeyP')
+  await page.waitForSelector('#ovl-pause:not(.hidden)')
+  await page.screenshot({ path: `${out}/06-pause.png` })
+  console.log('smoke: pause verified')
+
+  // Resume
+  await page.click('#btn-resume')
+  await page.waitForSelector('#ovl-pause', { state: 'hidden' })
+  console.log('smoke: resume verified')
+
+  if (errors.length > 0) {
+    throw new Error(`Errors during smoke test:\n${errors.join('\n')}`)
+  }
+
+  console.log('smoke: SUCCESS — all checks passed cleanly!')
   await browser.close()
   cleanup()
-  console.log(`smoke: OK — screenshots in ${out}/`)
-} catch (err) {
-  await fail(err?.message ?? String(err))
+  process.exit(0)
+} catch (e) {
+  await fail(e instanceof Error ? e.message : String(e))
 }

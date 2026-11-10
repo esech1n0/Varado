@@ -1,22 +1,27 @@
-import { GRENADE, LEGO_TOTAL, WEAPONS, WEAPON_ORDER, type AmmoWeapon, type WeaponId } from './config'
+import { FUEL_TOTAL, GRENADE, LEGO_TOTAL, WEAPONS, WEAPON_ORDER, type AmmoWeapon, type WeaponId } from './config'
+import { ACHIEVEMENTS, achievements, type AchievementDef } from './achievements'
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T
 
-export type RadarDot = { x: number; y: number; kind: 'enemy' | 'site' | 'beacon' | 'ship' | 'lego' | 'buggy' | 'boss' | 'pickup' }
-export type OverlayId = 'start' | 'pause' | 'settings' | 'dead' | 'end'
+export type RadarDot = { x: number; y: number; kind: 'enemy' | 'site' | 'beacon' | 'ship' | 'lego' | 'buggy' | 'boss' | 'pickup' | 'fuel' }
+export type OverlayId = 'start' | 'diff' | 'ach' | 'pause' | 'settings' | 'dead' | 'end'
+const OVERLAYS: OverlayId[] = ['start', 'diff', 'ach', 'pause', 'settings', 'dead', 'end']
 
 export class Hud {
   private capTimer = 0
   private radioTimer = 0
+  private toastTimer = 0
   private lastHp = -1
   private lastWeapons = ''
   private lastStamina = ''
   private lastObj = ''
+  private lastFuel = ''
   private scoped = false
   private radarCtx = $<HTMLCanvasElement>('radar').getContext('2d')!
 
   constructor() {
     $('legoT').textContent = String(LEGO_TOTAL)
+    $('fuelT').textContent = String(FUEL_TOTAL)
   }
 
   showHud(on: boolean, touch = false): void {
@@ -27,7 +32,38 @@ export class Hud {
     $(`ovl-${id}`).classList.toggle('hidden', !on)
   }
   anyOverlay(): boolean {
-    return (['start', 'pause', 'settings', 'dead', 'end'] as OverlayId[]).some(i => !$(`ovl-${i}`).classList.contains('hidden'))
+    return OVERLAYS.some(i => !$(`ovl-${i}`).classList.contains('hidden'))
+  }
+
+  setFuel(carried: number, placed = 0, total = 3): void {
+    const val = `${carried}-${placed}`
+    if (val === this.lastFuel) return
+    this.lastFuel = val
+    $('fuelN').textContent = String(carried)
+    $('fuelT').textContent = String(total)
+    $('fuel').classList.toggle('on', carried > 0 || placed > 0)
+  }
+
+  /** Aviso emergente al desbloquear un logro. */
+  toast(a: AchievementDef): void {
+    const el = $('toast')
+    $('toastTitle').textContent = a.title
+    $('toastDesc').textContent = a.desc
+    el.classList.add('on')
+    clearTimeout(this.toastTimer)
+    this.toastTimer = window.setTimeout(() => el.classList.remove('on'), 4200)
+  }
+
+  /** Dibuja la lista de logros con su barra de progreso verde 0/n. */
+  renderAchievements(): void {
+    const c = achievements.count()
+    $('ach-count').textContent = `${c.done} / ${c.total}`
+    $('ach-list').innerHTML = ACHIEVEMENTS.map(a => {
+      const p = achievements.progress(a.id)
+      const done = achievements.done(a.id)
+      const pct = Math.round((p / a.goal) * 100)
+      return `<div class="ach ${done ? 'done' : ''}"><div class="ach-top"><b>${a.title}</b><span>${done ? '✔ ' : ''}${p}/${a.goal}</span></div><div class="ach-desc">${a.desc}</div><div class="ach-bar"><i style="width:${pct}%"></i></div></div>`
+    }).join('')
   }
 
   setHp(hp: number, max: number): void {
@@ -130,10 +166,6 @@ export class Hud {
   hurt(v: number): void {
     $('hurt').style.opacity = String(Math.min(1, v))
   }
-  speed(text: string): void {
-    const el = $('speed')
-    if (el.textContent !== text) el.textContent = text
-  }
   fade(on: boolean): void {
     $('fade').classList.toggle('on', on)
   }
@@ -235,6 +267,14 @@ export class Hud {
         case 'pickup':
           g.fillStyle = '#9fe8ff'
           g.fillRect(px - 1.5, py - 1.5, 3, 3)
+          break
+        case 'fuel':
+          g.fillStyle = '#ff9a2a'
+          g.beginPath()
+          g.moveTo(px, py - 5)
+          g.lineTo(px + 4, py + 4)
+          g.lineTo(px - 4, py + 4)
+          g.fill()
           break
         case 'buggy':
           g.fillStyle = '#ffffff'

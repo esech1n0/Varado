@@ -627,3 +627,180 @@ export function makeBeacon(): THREE.Group {
   g.userData = { lamp, ring }
   return g
 }
+
+/** Cohete espacial clásico estilo LEGO (cuerpo cilíndrico blanco/rojo, punta cónica, 3 aletas, ventanilla y propulsor). */
+export function makeRocket(): THREE.Group {
+  const g = new THREE.Group()
+  const white = 0xf4f5f0
+  const red = 0xd92b3a
+  const dark = 0x252932
+  const gray = 0x6e7585
+  const yellow = 0xffc61a
+
+  // Plataforma de lanzamiento LEGO octogonal con tacos
+  const pad = cyl(58, 64, 8, dark, 16)
+  pad.position.y = 4
+  g.add(pad)
+  const padRim = cyl(50, 52, 3, yellow, 16)
+  padRim.position.y = 9.5
+  g.add(padRim)
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    const st = cyl(4, 4, 3, gray, 10)
+    st.position.set(Math.cos(a) * 42, 12, Math.sin(a) * 42)
+    g.add(st)
+  }
+
+  // Tobera / propulsor inferior
+  const nozzle = cyl(18, 28, 22, dark, 18, { metalness: 0.45, roughness: 0.35 })
+  nozzle.position.y = 18
+  g.add(nozzle)
+  const nozzleGlow = cyl(14, 22, 6, 0xff7a1f, 16, { emissive: 0xff5500, emissiveIntensity: 1.1 })
+  nozzleGlow.position.y = 10
+  g.add(nozzleGlow)
+
+  // Cuerpo cilíndrico escalonado estilo bloques LEGO
+  const b1 = cyl(31, 33, 28, red, 22)
+  b1.position.y = 42
+  g.add(b1)
+  const b2 = cyl(31, 31, 56, white, 22)
+  b2.position.y = 84
+  g.add(b2)
+  const band1 = cyl(31.8, 31.8, 10, red, 22)
+  band1.position.y = 66
+  g.add(band1)
+  const band2 = cyl(31.8, 31.8, 8, dark, 22)
+  band2.position.y = 110
+  g.add(band2)
+  const b3 = cyl(27, 31, 36, white, 22)
+  b3.position.y = 130
+  g.add(b3)
+
+  // Punta cónica roja clásica con antena y taco superior
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(27, 48, 22), mat(red, { roughness: 0.4 }))
+  nose.position.y = 172
+  nose.castShadow = true
+  g.add(nose)
+  const noseStud = cyl(6, 6, 5, red, 12)
+  noseStud.position.y = 197
+  g.add(noseStud)
+  const spire = cyl(1.8, 2.5, 18, gray, 8)
+  spire.position.y = 208
+  g.add(spire)
+  const tipLight = ball(3.8, 0x57f2ff, { emissive: 0x35d0ff, emissiveIntensity: 1.2 }, 10)
+  tipLight.position.y = 218
+  g.add(tipLight)
+
+  // Ventanilla circular (ojo de buey) mirando al oeste (hacia donde llega el jugador)
+  const portFrame = cyl(13, 13, 8, dark, 18)
+  portFrame.rotation.z = Math.PI / 2
+  portFrame.position.set(-29, 92, 0)
+  g.add(portFrame)
+  const portRim = cyl(11, 11, 9, yellow, 18)
+  portRim.rotation.z = Math.PI / 2
+  portRim.position.set(-29.5, 92, 0)
+  g.add(portRim)
+  const portGlass = cyl(8.8, 8.8, 10, 0x7ef4ff, 18, { emissive: 0x1ca8d8, emissiveIntensity: 0.75, roughness: 0.15 })
+  portGlass.rotation.z = Math.PI / 2
+  portGlass.position.set(-30, 92, 0)
+  g.add(portGlass)
+
+  // 3 aletas rojas escalonadas estilo bloques LEGO a 120°
+  for (let i = 0; i < 3; i++) {
+    const fin = new THREE.Group()
+    fin.rotation.y = (i * Math.PI * 2) / 3
+    fin.add(box(28, 46, 8, red, 38, 36, 0))
+    fin.add(box(18, 30, 8, red, 52, 26, 0))
+    fin.add(box(10, 18, 10, dark, 58, 14, 0))
+    // tacos LEGO sobre el borde superior de cada aleta
+    for (const sx of [30, 42, 54]) {
+      const st = cyl(2.8, 2.8, 3, red, 8)
+      st.position.set(sx, sx === 54 ? 42 : 60, 0)
+      fin.add(st)
+    }
+    g.add(fin)
+  }
+
+  // Tanques de combustible externos (donde se cargan las 3 piedras ignífugas)
+  for (let i = 0; i < 3; i++) {
+    const a = (i * Math.PI * 2) / 3 + Math.PI / 3
+    const tx = Math.cos(a) * 32
+    const tz = Math.sin(a) * 32
+    const tank = cyl(6.5, 6.5, 32, gray, 12)
+    tank.position.set(tx, 46, tz)
+    const cell = cyl(5.2, 5.2, 12, 0xff8a1f, 12, { emissive: 0xff5500, emissiveIntensity: 0.7 })
+    cell.position.set(tx, 46, tz)
+    g.add(tank, cell)
+  }
+
+  return g
+}
+
+/** Piedra ignífuga: cristal ígneo brillante sobre base de roca volcánica LEGO. */
+export function makeFuelStone(): THREE.Group {
+  const g = new THREE.Group()
+  const base = cyl(14, 17, 6, 0x2b2628, 10)
+  base.position.y = 3
+  g.add(base)
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.4
+    const st = cyl(2.6, 2.6, 2.2, 0x3d3538, 8)
+    st.position.set(Math.cos(a) * 8, 7, Math.sin(a) * 8)
+    g.add(st)
+  }
+  const gemMat = mat(0xff8a1f, { emissive: 0xff4500, emissiveIntensity: 0.95, roughness: 0.2, metalness: 0.1 })
+  const coreMat = mat(0xffe680, { emissive: 0xffaa00, emissiveIntensity: 1.1, roughness: 0.15 })
+  const main = new THREE.Mesh(new THREE.OctahedronGeometry(10, 0), gemMat)
+  main.scale.set(0.85, 1.65, 0.85)
+  main.position.y = 18
+  main.castShadow = true
+  g.add(main)
+  for (const [dx, dz, rotZ, rotX, sc] of [
+    [-6, 3, 0.35, -0.15, 0.65],
+    [6, -2, -0.38, 0.2, 0.6],
+    [1, -6, 0.1, 0.4, 0.52],
+  ] as [number, number, number, number, number][]) {
+    const shard = new THREE.Mesh(new THREE.OctahedronGeometry(9, 0), coreMat)
+    shard.scale.set(0.7 * sc, 1.5 * sc, 0.7 * sc)
+    shard.position.set(dx, 13, dz)
+    shard.rotation.set(rotX, 0, rotZ)
+    g.add(shard)
+  }
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(17, 12, 10),
+    new THREE.MeshBasicMaterial({ color: 0xff7a1f, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }),
+  )
+  halo.position.y = 17
+  g.add(halo)
+  return g
+}
+
+export type LeverRig = { group: THREE.Group; arm: THREE.Group; lamp: THREE.MeshBasicMaterial }
+/** Palanca industrial LEGO montada en pared para abrir el portón del garage rojo. */
+export function makeLever(): LeverRig {
+  const group = new THREE.Group()
+  // Caja de control en la pared
+  group.add(box(18, 28, 8, 0x2a2d35, 0, 32, 0))
+  group.add(box(20, 4, 9, 0xffc61a, 0, 45, 0))
+  group.add(box(20, 4, 9, 0xffc61a, 0, 19, 0))
+  group.add(box(8, 14, 10, 0x161820, 0, 30, 1))
+  // Luz indicadora de estado (roja cerrada, verde abierta)
+  const lamp = new THREE.MeshBasicMaterial({ color: 0xff3b4a })
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(3.4, 10, 8), lamp)
+  bulb.position.set(0, 40, 5)
+  group.add(bulb)
+  // Brazo articulado de la palanca
+  const arm = new THREE.Group()
+  arm.position.set(0, 28, 5)
+  arm.rotation.x = -0.65 // hacia arriba inicialmente
+  const rod = cyl(1.6, 1.6, 18, 0xc7ccd6, 8)
+  rod.position.set(0, 9, 0)
+  arm.add(rod)
+  const grip = cyl(3.4, 3.4, 12, 0xe5384b, 10)
+  grip.rotation.z = Math.PI / 2
+  grip.position.set(0, 18, 0)
+  arm.add(grip)
+  group.add(arm)
+  return { group, arm, lamp }
+}
+

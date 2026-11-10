@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { ARENA, BY0, BY1, COVER_H, D1X, D2X, DOOR_H, FY0, FY1, ROAD_W, ROAD_Y, ROOM_H, SHIP, WORLD, ZC_END } from './config'
-import { addStuds, basic, box, buildStuds, cyl, mat } from './gfx'
+import { addStuds, basic, box, buildStuds, cyl, makeLever, mat, type LeverRig } from './gfx'
 import { Grid, clamp, seeded, type Rect } from './geom'
 
 export type Pal = { b: number; s: number }
@@ -23,7 +23,7 @@ export type PickupSpawn = { kind: PickupKind; x: number; y: number; z?: number }
 export type TurretSpawn = { x: number; y: number }
 export type FenceSpawn = { ax: number; ay: number; bx: number; by: number; period: number; onTime: number; phase: number }
 export type PlateSpawn = { x: number; y: number; w: number; h: number; phase: number }
-export type CampSpawn = { x: number; y: number; soldier?: number; shooter?: number; tank?: number; spread: number }
+export type CampSpawn = { x: number; y: number; soldier?: number; shooter?: number; tank?: number; spread: number; name?: string; visited?: boolean }
 export type BeaconSpawn = { x: number; y: number; name: string }
 export type WreckSpawn = { x: number; y: number; scale: number; rot: number }
 export type LegoSpawn = { x: number; y: number; variant: number }
@@ -46,6 +46,7 @@ export type WorldData = {
   covers: Rect[]
   endWall: Rect & { on: boolean }
   endWallMesh: THREE.Mesh
+  lever: LeverRig & { x: number; y: number }
   doors: { d1: DoorRig; d2: DoorRig }
   sky: THREE.Group
   stars: THREE.Points
@@ -553,6 +554,15 @@ export function buildWorld(scene: THREE.Scene): WorldData {
   const endWall = { x: ZC_END, y: FY0, w: 30, h: FY1 - FY0, on: true, top: DOOR_H + 14 } as Rect & { on: boolean }
   grid.add(endWall)
   const endWallMesh = wall(endWall.x, endWall.y, endWall.w, endWall.h, DOOR_H + 14, PAL.red, { solid: false, studs: false })
+  // Palanca en la pared del garage rojo junto al portón de salida
+  const leverRig = makeLever()
+  const leverX = 2485
+  const leverY = FY0 + 5
+  leverRig.group.position.set(leverX, 0, leverY)
+  world.add(leverRig.group)
+  const leverPad = box(36, 1.2, 26, 0xffc61a, leverX, 0.6, FY0 + 20, false)
+  world.add(leverPad)
+  const lever = { ...leverRig, x: leverX, y: FY0 + 20 }
   {
     const rc = seeded(19)
     for (const c of covers) {
@@ -896,7 +906,7 @@ export function buildWorld(scene: THREE.Scene): WorldData {
     pal: Pal,
   ): void => {
     site(id, name, cx - 260, cy - 240, 520, 480)
-    camps.push({ x: cx, y: cy, ...enemies, spread: 175 })
+    camps.push({ x: cx, y: cy, ...enemies, spread: 175, name, visited: false })
     // barricadas de ruina de distintas alturas alrededor del campamento
     wall(cx - 210, cy - 190, 120, 24, 38, pal, { style: 'ruin' })
     wall(cx + 90, cy - 190, 130, 24, 52, pal, { style: 'ruin' })
@@ -981,7 +991,7 @@ export function buildWorld(scene: THREE.Scene): WorldData {
   }
   legos.push({ x: ARENA.x + 955, y: 735, variant: 3 })
   pickups.push({ kind: 'medkit', x: ARENA.x + 100, y: 130 }, { kind: 'medkit', x: ARENA.x + 100, y: 410 }, { kind: 'ammo', x: ARENA.x + 130, y: 270 })
-  const shipRect: Rect = { x: SHIP.x - 95, y: SHIP.y - 70, w: 190, h: 140, top: 85 }
+  const shipRect: Rect = { x: SHIP.x - 56, y: SHIP.y - 56, w: 112, h: 112, top: 215 }
   solid(shipRect)
   camps.push({ x: ARENA.x + 350, y: 270, soldier: 6, shooter: 2, spread: 220 })
 
@@ -1191,5 +1201,5 @@ export function buildWorld(scene: THREE.Scene): WorldData {
   void mat
   void basic
 
-  return { grid, sites, pickups, campLoot, heightAt, legos, turrets, fences, plates, camps, beacons, wrecks, covers, endWall, endWallMesh, doors, sky, stars, planet, moon, tower, shipRect }
+  return { grid, sites, pickups, campLoot, heightAt, legos, turrets, fences, plates, camps, beacons, wrecks, covers, endWall, endWallMesh, lever, doors, sky, stars, planet, moon, tower, shipRect }
 }

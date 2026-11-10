@@ -1,4 +1,4 @@
-// Constantes del nivel, armas y enemigos. Los valores ajustables viven en CONFIG (ver tuning.ts).
+// Constantes del nivel, armas y enemigos.
 
 // ---------- Corredor inicial (x = largo del pasillo) ----------
 export const FY0 = 90
@@ -32,7 +32,8 @@ export type Config = {
   camera: { fov: number }
 }
 
-export const DEFAULT_CONFIG: Config = {
+/** Valores de jugabilidad base (la dificultad elegida los modifica a través de DIFFICULTIES). */
+export const CONFIG: Config = {
   player: { speed: 200 },
   buggy: { maxSpeed: 440, accel: 360 },
   horde: { interval: 24, size: 1, cap: 30 },
@@ -40,8 +41,36 @@ export const DEFAULT_CONFIG: Config = {
   camera: { fov: 62 },
 }
 
-/** Valores activos; tuning.ts es la única pieza que los modifica durante la vista previa. */
-export const CONFIG: Config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as Config
+// ---------- Dificultad (se aplica sobre los valores base, que son los de 'Moderado') ----------
+export type DifficultyId = 'easy' | 'normal' | 'hard' | 'infestation'
+export type DifficultyDef = {
+  id: DifficultyId
+  name: string
+  blurb: string
+  /** Multiplicador de apariciones (campamentos y hordas). */
+  spawn: number
+  /** Multiplicador de velocidad de los enemigos. */
+  speed: number
+  /** Multiplicador del tiempo entre ataques (>1 = ataques más lentos). */
+  attack: number
+  /** Multiplicador de la probabilidad de drops. */
+  drops: number
+  /** Multiplicador de vida enemiga. */
+  hp: number
+}
+export const DIFFICULTIES: Record<DifficultyId, DifficultyDef> = {
+  easy: { id: 'easy', name: 'Fácil', blurb: 'Menos enemigos, más lentos y con ataques más pausados. +30% de drops.', spawn: 0.7, speed: 0.9, attack: 1.25, drops: 1.3, hp: 1 },
+  normal: { id: 'normal', name: 'Moderado', blurb: 'La experiencia base de Varado.', spawn: 1, speed: 1, attack: 1, drops: 1, hp: 1 },
+  hard: { id: 'hard', name: 'Difícil', blurb: '+10% de enemigos, +10% de velocidad, +5% de vida y −10% de drops.', spawn: 1.1, speed: 1.1, attack: 1, drops: 0.9, hp: 1.05 },
+  infestation: { id: 'infestation', name: 'INFESTACIÓN', blurb: '+25% de enemigos, mucho más rápidos, +10% de vida y −15% de drops.', spawn: 1.25, speed: 1.2, attack: 1, drops: 0.85, hp: 1.1 },
+}
+export const DIFFICULTY_ORDER: DifficultyId[] = ['easy', 'normal', 'hard', 'infestation']
+
+/** Daño máximo de la granada de plasma contra el jefe (fracción de su vida en el centro). */
+export const BOSS_GRENADE_FRAC = 0.35
+
+// ---------- Piedras ignífugas (combustible del cohete) ----------
+export const FUEL_TOTAL = 3
 
 // ---------- Armas ----------
 export type WeaponId = 'pistol' | 'rifle' | 'shotgun' | 'sniper'
@@ -84,27 +113,41 @@ export const SNIPER = {
 }
 
 // ---------- Ajustes de usuario (menú de configuración) ----------
+export type Quality = 'auto' | 'high' | 'medium' | 'low'
 export type UserSettings = {
   masterVolume: number
   sfxVolume: number
+  weaponVolume: number
+  buggyVolume: number
+  musicVolume: number
   sensitivity: number
+  quality: Quality
 }
 
-const SETTINGS_KEY = 'varado_settings_v1'
+const SETTINGS_KEY = 'varado_settings_v2'
+
+const clampN = (v: unknown, lo: number, hi: number, def: number): number => {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : def
+  return Math.max(lo, Math.min(hi, n))
+}
 
 export const SETTINGS: UserSettings = (() => {
-  const def: UserSettings = { masterVolume: 100, sfxVolume: 100, sensitivity: 1 }
+  let parsed: Partial<UserSettings> = {}
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
-    if (!raw) return def
-    const parsed = JSON.parse(raw) as Partial<UserSettings>
-    return {
-      masterVolume: Math.max(0, Math.min(100, Number.isFinite(parsed.masterVolume) ? Number(parsed.masterVolume) : 100)),
-      sfxVolume: Math.max(0, Math.min(100, Number.isFinite(parsed.sfxVolume) ? Number(parsed.sfxVolume) : 100)),
-      sensitivity: Math.max(0.1, Math.min(10, Number.isFinite(parsed.sensitivity) ? Number(parsed.sensitivity) : 1)),
-    }
+    if (raw) parsed = JSON.parse(raw) as Partial<UserSettings>
   } catch {
-    return def
+    /* localStorage puede estar deshabilitado */
+  }
+  const q = parsed.quality
+  return {
+    masterVolume: clampN(parsed.masterVolume, 0, 100, 100),
+    sfxVolume: clampN(parsed.sfxVolume, 0, 100, 100),
+    weaponVolume: clampN(parsed.weaponVolume, 0, 100, 100),
+    buggyVolume: clampN(parsed.buggyVolume, 0, 100, 100),
+    musicVolume: clampN(parsed.musicVolume, 0, 100, 60),
+    sensitivity: clampN(parsed.sensitivity, 0.1, 10, 1),
+    quality: q === 'high' || q === 'medium' || q === 'low' || q === 'auto' ? q : 'auto',
   }
 })()
 
