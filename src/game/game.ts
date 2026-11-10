@@ -148,6 +148,7 @@ export class Game {
   hordeT = 14
   hordeCount = 0
   noiseT = 0
+  lastFireT = -10
   deadT = 0
   endT = 0
   radioQ: { t: number; text: string }[] = []
@@ -455,6 +456,7 @@ export class Game {
     this.camYaw = 0
     this.camPitch = 0.42
     this.camInit = false
+    this.lastFireT = -10
     this.mode = 'menu'
     Object.assign(this.p, {
       x: 110, y: 270, hp: MAX_HP, face: 0, walk: 0, moving: 0, cd: 0, inv: 0, kx: 0, ky: 0, weapon: 'pistol', danger: 99, alive: true,
@@ -904,7 +906,27 @@ export class Game {
     moveCircle(this.grid, this.extra, p, dx, dy)
     p.moving = clamp(Math.hypot(p.x - ox, p.y - oy) / (base * dt + 1e-6), 0, 1.6)
     p.walk += p.moving * dt * 11
-    p.face = this.yaw
+
+    // Orientación del cuerpo del personaje tipo brújula de 8 direcciones (N, NE, E, SE, S, SO, O, NO):
+    // 1. Al disparar o apuntar con zoom -> el cuerpo gira hacia la retícula/mira (this.yaw).
+    // 2. Al realizar dash -> se orienta en la dirección del impulso.
+    // 3. Al moverse sin disparar -> rota hacia uno de los 8 rumbos de la brújula relativo a la cámara.
+    // 4. Al estar quieto -> mantiene su orientación previa.
+    const isAiming = this.input.fire || p.zoomed || (this.t - this.lastFireT < 0.35)
+    let targetFace = p.face
+    if (isAiming) {
+      targetFace = this.yaw
+    } else if (p.dashT > 0) {
+      targetFace = Math.atan2(p.dashY, p.dashX)
+    } else if (hasInput) {
+      const step = Math.PI / 4 // 8 rumbos cardinales e intercardinales (45°)
+      const rawLocal = Math.atan2(s, f) // W=0 (N), D=PI/2 (E), S=PI (S), A=-PI/2 (O)
+      const compassLocal = Math.round(rawLocal / step) * step
+      targetFace = this.yaw + compassLocal
+    }
+    const rotSpeed = isAiming ? 32 : 22 // Giro rápido y fluido con suavizado angular
+    const turnK = 1 - Math.exp(-rotSpeed * dt)
+    p.face += angDiff(p.face, targetFace) * turnK
   }
 
   /** Regeneración de estamina: sólo cuando no corres ni haces dash. */
@@ -1009,6 +1031,7 @@ export class Game {
       p.ammo[w.id]--
     }
     p.cd = w.rate
+    this.lastFireT = this.t
     if (w.id === 'sniper') {
       this.fireSniper()
       return
@@ -1062,6 +1085,7 @@ export class Game {
 
   /** Disparo del Francotirador: bala de luz instantánea en 3D (200 daño; de cerca mata al instante). */
   private fireSniper(): void {
+    this.lastFireT = this.t
     const p = this.p
     const w = WEAPONS.sniper
     const fx = Math.cos(this.yaw)
@@ -1211,6 +1235,7 @@ export class Game {
     if (p.grenadeCd > 0) return
     p.grenades--
     p.grenadeCd = GRENADE.cooldown
+    this.lastFireT = this.t
     const fx = Math.cos(this.yaw)
     const fz = Math.sin(this.yaw)
     const x = p.x + fx * 22
@@ -2080,6 +2105,8 @@ export class Game {
     this.camYaw = 0
     this.camPitch = 0.42
     this.camInit = false
+    this.lastFireT = -10
+    p.face = 0
     this.mode = 'play'
     this.deadShown = false
     for (const b of this.eprojs) this.projG.remove(b.mesh)
@@ -2854,7 +2881,7 @@ export class Game {
       rig.legs.forEach(l => (l.rotation.z = 0))
     } else {
       this.playerM.position.set(p.x, gz + Math.abs(Math.sin(p.walk)) * 1.2 * p.moving, p.y)
-      this.playerM.rotation.y = -this.yaw
+      this.playerM.rotation.y = -p.face
       const sw = Math.sin(p.walk) * 0.7 * p.moving
       rig.legs[0].rotation.z = sw
       rig.legs[1].rotation.z = -sw
