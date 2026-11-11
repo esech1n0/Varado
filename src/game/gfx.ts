@@ -695,109 +695,203 @@ export function makeBeacon(): THREE.Group {
 }
 
 /** Cohete espacial clásico estilo LEGO (cuerpo cilíndrico blanco/rojo, punta cónica, 3 aletas, ventanilla y propulsor). */
-export function makeRocket(): THREE.Group {
+/** Cohete espacial mejorado estilo LEGO con alas laterales, disparadores láser y estante de lanzamiento. */
+export function makeSpaceRocket(): THREE.Group {
   const g = new THREE.Group()
   const white = 0xf4f5f0
   const red = 0xd92b3a
-  const dark = 0x252932
-  const gray = 0x6e7585
+  const dark = 0x22262f
+  const gray = 0x5d6472
   const yellow = 0xffc61a
+  const cyan = 0x57f2ff
 
-  // Plataforma de lanzamiento LEGO octogonal con tacos
-  const pad = cyl(58, 64, 8, dark, 16)
-  pad.position.y = 4
-  g.add(pad)
-  const padRim = cyl(50, 52, 3, yellow, 16)
-  padRim.position.y = 9.5
-  g.add(padRim)
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2
-    const st = cyl(4, 4, 3, gray, 10)
-    st.position.set(Math.cos(a) * 42, 12, Math.sin(a) * 42)
-    g.add(st)
+  // 1. Toberas / Propulsores de alta potencia (3 propulsores)
+  const nozzleCenter = cyl(16, 26, 26, dark, 18, { metalness: 0.5, roughness: 0.35 })
+  nozzleCenter.position.y = 16
+  const glowCenter = cyl(12, 20, 6, 0xff7a1f, 16, { emissive: 0xff5500, emissiveIntensity: 1.4 })
+  glowCenter.position.y = 6
+  g.add(nozzleCenter, glowCenter)
+
+  for (const sx of [-22, 22]) {
+    const sideNozzle = cyl(10, 18, 20, dark, 14, { metalness: 0.5, roughness: 0.35 })
+    sideNozzle.position.set(sx, 14, 0)
+    const sideGlow = cyl(8, 14, 5, 0x57f2ff, 14, { emissive: 0x22aaff, emissiveIntensity: 1.3 })
+    sideGlow.position.set(sx, 6, 0)
+    g.add(sideNozzle, sideGlow)
   }
 
-  // Tobera / propulsor inferior
-  const nozzle = cyl(18, 28, 22, dark, 18, { metalness: 0.45, roughness: 0.35 })
-  nozzle.position.y = 18
-  g.add(nozzle)
-  const nozzleGlow = cyl(14, 22, 6, 0xff7a1f, 16, { emissive: 0xff5500, emissiveIntensity: 1.1 })
-  nozzleGlow.position.y = 10
-  g.add(nozzleGlow)
-
-  // Cuerpo cilíndrico escalonado estilo bloques LEGO
-  const b1 = cyl(31, 33, 28, red, 22)
-  b1.position.y = 42
-  g.add(b1)
-  const b2 = cyl(31, 31, 56, white, 22)
-  b2.position.y = 84
-  g.add(b2)
-  const band1 = cyl(31.8, 31.8, 10, red, 22)
-  band1.position.y = 66
+  // 2. Fuselaje principal escalonado (altura y tamaño aumentados a ~305 unidades)
+  // Etapa 1: Base roja reforzada con tacos LEGO
+  const s1 = cyl(38, 41, 42, red, 24)
+  s1.position.y = 48
+  g.add(s1)
+  const band1 = cyl(39.5, 39.5, 10, dark, 24)
+  band1.position.y = 70
   g.add(band1)
-  const band2 = cyl(31.8, 31.8, 8, dark, 22)
-  band2.position.y = 110
-  g.add(band2)
-  const b3 = cyl(27, 31, 36, white, 22)
-  b3.position.y = 130
-  g.add(b3)
 
-  // Punta cónica roja clásica con antena y taco superior
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(27, 48, 22), mat(red, { roughness: 0.4 }))
-  nose.position.y = 172
+  // Etapa 2: Fuselaje blanco con franja central y tacos de ensamble
+  const s2 = cyl(36, 38, 75, white, 24)
+  s2.position.y = 112
+  g.add(s2)
+  const stripe = cyl(36.8, 36.8, 16, red, 24)
+  stripe.position.y = 115
+  g.add(stripe)
+
+  // Etapa 3: Módulo de aviónica superior
+  const s3 = cyl(32, 36, 55, white, 24)
+  s3.position.y = 175
+  g.add(s3)
+  const band2 = cyl(32.8, 32.8, 8, yellow, 24)
+  band2.position.y = 155
+  g.add(band2)
+
+  // 3. Cono de morro aerodinámico y mástil superior
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(32, 65, 24), mat(red, { roughness: 0.35 }))
+  nose.position.y = 235
   nose.castShadow = true
   g.add(nose)
-  const noseStud = cyl(6, 6, 5, red, 12)
-  noseStud.position.y = 197
+
+  const noseStud = cyl(8, 8, 6, red, 14)
+  noseStud.position.y = 270
   g.add(noseStud)
-  const spire = cyl(1.8, 2.5, 18, gray, 8)
-  spire.position.y = 208
-  g.add(spire)
-  const tipLight = ball(3.8, 0x57f2ff, { emissive: 0x35d0ff, emissiveIntensity: 1.2 }, 10)
-  tipLight.position.y = 218
-  g.add(tipLight)
 
-  // Ventanilla circular (ojo de buey) mirando al oeste (hacia donde llega el jugador)
-  const portFrame = cyl(13, 13, 8, dark, 18)
-  portFrame.rotation.z = Math.PI / 2
-  portFrame.position.set(-29, 92, 0)
-  g.add(portFrame)
-  const portRim = cyl(11, 11, 9, yellow, 18)
-  portRim.rotation.z = Math.PI / 2
-  portRim.position.set(-29.5, 92, 0)
-  g.add(portRim)
-  const portGlass = cyl(8.8, 8.8, 10, 0x7ef4ff, 18, { emissive: 0x1ca8d8, emissiveIntensity: 0.75, roughness: 0.15 })
-  portGlass.rotation.z = Math.PI / 2
-  portGlass.position.set(-30, 92, 0)
-  g.add(portGlass)
+  const antenna = cyl(2.2, 3.2, 26, gray, 8)
+  antenna.position.y = 286
+  g.add(antenna)
 
-  // 3 aletas rojas escalonadas estilo bloques LEGO a 120°
-  for (let i = 0; i < 3; i++) {
-    const fin = new THREE.Group()
-    fin.rotation.y = (i * Math.PI * 2) / 3
-    fin.add(box(28, 46, 8, red, 38, 36, 0))
-    fin.add(box(18, 30, 8, red, 52, 26, 0))
-    fin.add(box(10, 18, 10, dark, 58, 14, 0))
-    // tacos LEGO sobre el borde superior de cada aleta
-    for (const sx of [30, 42, 54]) {
-      const st = cyl(2.8, 2.8, 3, red, 8)
-      st.position.set(sx, sx === 54 ? 42 : 60, 0)
-      fin.add(st)
+  const beacon = ball(4.5, cyan, { emissive: 0x35d0ff, emissiveIntensity: 1.5 }, 12)
+  beacon.position.y = 301
+  g.add(beacon)
+
+  // 4. Cabina / Visor de mando frontal estilo LEGO espacial
+  const canopyFrame = box(26, 30, 14, dark, 0, 185, 28)
+  const canopyGlass = box(22, 26, 15, cyan, 0, 185, 29, false)
+  canopyGlass.material = mat(cyan, { emissive: 0x1ca8d8, emissiveIntensity: 0.85, roughness: 0.15 })
+  g.add(canopyFrame, canopyGlass)
+
+  // 5. ALAS LATERALES (Left & Right Wings estilo LEGO)
+  for (const side of [-1, 1]) {
+    const wing = new THREE.Group()
+
+    // Placa de ala principal en declive
+    const mainPlate = box(52, 60, 6, red, side * 58, 70, 0)
+    // Borde exterior biselado
+    const tipPlate = box(28, 42, 6, white, side * 92, 58, 0)
+    // Refuerzo estructural inferior
+    const strut = box(40, 8, 8, dark, side * 55, 45, 0)
+
+    wing.add(mainPlate, tipPlate, strut)
+
+    // Tacos LEGO sobre las alas
+    for (const offX of [45, 65, 85]) {
+      for (const offY of [55, 75]) {
+        const st = cyl(3, 3, 2.5, red, 8)
+        st.rotation.x = Math.PI / 2
+        st.position.set(side * offX, offY, 3.5)
+        wing.add(st)
+      }
     }
+
+    // 6. DISPARADORES LÁSER EN LA PUNTA DE LAS ALAS (Wingtip Laser Cannons)
+    const cannon = new THREE.Group()
+    cannon.position.set(side * 106, 68, 0)
+
+    // Alojamiento blindado del cañón
+    const housing = box(10, 36, 12, dark, 0, 0, 0)
+    const cooler = box(12, 18, 14, gray, 0, -4, 0)
+    // Tubo del cañón doble apuntando hacia el frente (+Y)
+    const b1 = cyl(3, 3, 34, dark, 10, { metalness: 0.6, roughness: 0.3 })
+    b1.position.set(-3, 18, 0)
+    const b2 = cyl(3, 3, 34, dark, 10, { metalness: 0.6, roughness: 0.3 })
+    b2.position.set(3, 18, 0)
+    // Puntas / cristales emisores de plasma láser cian brillante
+    const tip1 = cyl(3.2, 1.5, 8, cyan, 10, { emissive: 0x35d0ff, emissiveIntensity: 1.6 })
+    tip1.position.set(-3, 37, 0)
+    const tip2 = cyl(3.2, 1.5, 8, cyan, 10, { emissive: 0x35d0ff, emissiveIntensity: 1.6 })
+    tip2.position.set(3, 37, 0)
+
+    cannon.add(housing, cooler, b1, b2, tip1, tip2)
+    wing.add(cannon)
+
+    g.add(wing)
+  }
+
+  // 7. Aletas estabilizadoras dorsales (frente y dorso en Z)
+  for (const sz of [-1, 1]) {
+    const fin = box(8, 50, 24, red, 0, 68, sz * 44)
     g.add(fin)
   }
 
-  // Tanques de combustible externos (donde se cargan las 3 piedras ignífugas)
-  for (let i = 0; i < 3; i++) {
-    const a = (i * Math.PI * 2) / 3 + Math.PI / 3
-    const tx = Math.cos(a) * 32
-    const tz = Math.sin(a) * 32
-    const tank = cyl(6.5, 6.5, 32, gray, 12)
-    tank.position.set(tx, 46, tz)
-    const cell = cyl(5.2, 5.2, 12, 0xff8a1f, 12, { emissive: 0xff5500, emissiveIntensity: 0.7 })
-    cell.position.set(tx, 46, tz)
+  // 8. Celdas de combustible ignífugas laterales
+  for (const sx of [-28, 28]) {
+    const tank = cyl(7, 7, 38, gray, 12)
+    tank.position.set(sx, 75, 26)
+    const cell = cyl(5.8, 5.8, 16, 0xff8a1f, 12, { emissive: 0xff5500, emissiveIntensity: 0.85 })
+    cell.position.set(sx, 75, 26)
     g.add(tank, cell)
   }
+
+  return g
+}
+
+export function makeRocket(): THREE.Group {
+  const g = new THREE.Group()
+  const yellow = 0xffc61a
+  const dark = 0x22262f
+  const gray = 0x5d6472
+
+  // Estante / torre de lanzamiento que sostiene el cohete
+  const stand = new THREE.Group()
+
+  // Plataforma octogonal
+  const pad = cyl(78, 86, 14, dark, 16)
+  pad.position.y = 7
+  const padRim = cyl(70, 72, 4, yellow, 16)
+  padRim.position.y = 15
+  stand.add(pad, padRim)
+
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2
+    const st = cyl(4.5, 4.5, 3.5, gray, 10)
+    st.position.set(Math.cos(a) * 58, 18, Math.sin(a) * 58)
+    stand.add(st)
+  }
+
+  // Torre de celosía vertical en el lateral este (+X)
+  const towerX = 66
+  const towerZ = 0
+  const towerH = 240
+  for (const dx of [-14, 14]) {
+    for (const dz of [-14, 14]) {
+      stand.add(box(5, towerH, 5, yellow, towerX + dx, towerH / 2 + 12, towerZ + dz))
+    }
+  }
+  for (let y = 30; y <= towerH; y += 40) {
+    stand.add(box(32, 4, 32, dark, towerX, y + 12, towerZ))
+    stand.add(box(38, 3, 38, gray, towerX, y + 14, towerZ))
+  }
+
+  // Brazos de soporte / estantes que sostienen la nave
+  const arm1 = new THREE.Group()
+  arm1.position.set(towerX, 90, towerZ)
+  arm1.add(box(44, 8, 10, dark, -22, 0, 0))
+  arm1.add(box(12, 10, 18, yellow, -44, 0, -22))
+  arm1.add(box(12, 10, 18, yellow, -44, 0, 22))
+  stand.add(arm1)
+
+  const arm2 = new THREE.Group()
+  arm2.position.set(towerX, 175, towerZ)
+  arm2.add(box(44, 7, 8, dark, -22, 0, 0))
+  arm2.add(box(10, 8, 16, yellow, -44, 0, -20))
+  arm2.add(box(10, 8, 16, yellow, -44, 0, 20))
+  stand.add(arm2)
+
+  g.add(stand)
+
+  // La nave con su nuevo diseño incorporando alas y cañones láser
+  const ship = makeSpaceRocket()
+  g.add(ship)
+  g.userData = { stand, ship }
 
   return g
 }

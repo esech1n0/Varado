@@ -4,8 +4,8 @@ import { ACHIEVEMENTS, achievements, type AchievementDef } from './achievements'
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T
 
 export type RadarDot = { x: number; y: number; kind: 'enemy' | 'site' | 'beacon' | 'ship' | 'lego' | 'buggy' | 'boss' | 'pickup' | 'fuel' }
-export type OverlayId = 'start' | 'diff' | 'ach' | 'pause' | 'settings' | 'dead' | 'end'
-const OVERLAYS: OverlayId[] = ['start', 'diff', 'ach', 'pause', 'settings', 'dead', 'end']
+export type OverlayId = 'start' | 'diff' | 'ach' | 'pause' | 'settings' | 'dead' | 'end' | 'space-dead'
+const OVERLAYS: OverlayId[] = ['start', 'diff', 'ach', 'pause', 'settings', 'dead', 'end', 'space-dead']
 
 export class Hud {
   private capTimer = 0
@@ -220,6 +220,26 @@ export class Hud {
     this.overlay('end', true)
   }
 
+  spaceDeadScreen(stats: string[]): void {
+    const el = $('space-dead-stats')
+    if (el) el.innerHTML = stats.map(s => `<span>${s}</span>`).join('')
+    this.overlay('space-dead', true)
+  }
+
+  updateBuggyMarker(screenX: number, screenY: number, distanceM: number, visible: boolean): void {
+    const el = $('buggy-marker')
+    if (!el) return
+    if (!visible) {
+      el.classList.add('hidden')
+      return
+    }
+    el.classList.remove('hidden')
+    el.style.left = `${Math.round(screenX)}px`
+    el.style.top = `${Math.round(screenY)}px`
+    const num = $('buggyDstNum')
+    if (num) num.textContent = `${distanceM}m`
+  }
+
   /** Radar centrado en el jugador; arriba = hacia donde mira la cámara. */
   radar(cx: number, cy: number, yaw: number, dots: RadarDot[], range = 950): void {
     const g = this.radarCtx
@@ -252,7 +272,7 @@ export class Hud {
       const dd = Math.hypot(px - R, py - R)
       const edge = R - 8
       if (dd > edge) {
-        if (d.kind !== 'ship' && d.kind !== 'beacon' && d.kind !== 'buggy') continue
+        if (d.kind !== 'ship' && d.kind !== 'beacon' && d.kind !== 'buggy' && d.kind !== 'lego') continue
         px = R + ((px - R) / dd) * edge
         py = R + ((py - R) / dd) * edge
       }

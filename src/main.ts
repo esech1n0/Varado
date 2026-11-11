@@ -252,7 +252,7 @@ function showMenuBackground(show: boolean): void {
 // Control de pausa y ventanas
 // ==========================================
 function pause(): void {
-  if (!started || game.mode !== 'play' || game.paused) return
+  if (!started || (game.mode !== 'play' && game.mode !== 'space') || game.paused) return
   game.paused = true
   engineSet(false, 0)
   inSettings = false
@@ -267,7 +267,7 @@ function resume(): void {
   inSettings = false
   hud.overlay('settings', false)
   hud.overlay('pause', false)
-  input.requestLock()
+  if (game.mode === 'play') input.requestLock()
 }
 
 input.onLockChange = locked => {
@@ -276,7 +276,7 @@ input.onLockChange = locked => {
 
 addEventListener('keydown', e => {
   const isInput = (e.target as HTMLElement | null)?.tagName === 'INPUT'
-  if (e.code === 'Escape' && started && game.mode === 'play') {
+  if (e.code === 'Escape' && started && (game.mode === 'play' || game.mode === 'space')) {
     if (isInput) (e.target as HTMLElement).blur()
     if (inSettings) {
       inSettings = false
@@ -289,7 +289,7 @@ addEventListener('keydown', e => {
     return
   }
   if (isInput) return
-  if (e.code === 'KeyP' && started && game.mode === 'play') {
+  if (e.code === 'KeyP' && started && (game.mode === 'play' || game.mode === 'space')) {
     if (inSettings) return
     game.paused ? resume() : pause()
   }
@@ -426,10 +426,32 @@ $('btn-again').addEventListener('click', () => {
   audioInit()
   engineStop()
   hud.overlay('end', false)
+  game.spaceLevel.showHud(false)
   showMenuBackground(true)
   game.resetRun()
   hud.overlay('start', true)
 })
+
+const btnSpaceRetry = $('btn-space-retry')
+if (btnSpaceRetry) {
+  btnSpaceRetry.addEventListener('click', () => {
+    audioInit()
+    hud.overlay('space-dead', false)
+    game.startLevel2()
+  })
+}
+
+const btnSpaceMenu = $('btn-space-menu')
+if (btnSpaceMenu) {
+  btnSpaceMenu.addEventListener('click', () => {
+    audioInit()
+    hud.overlay('space-dead', false)
+    game.spaceLevel.showHud(false)
+    showMenuBackground(true)
+    game.resetRun()
+    hud.overlay('start', true)
+  })
+}
 
 // ==========================================
 // Configuración: Volúmenes, Sensibilidad y Calidad

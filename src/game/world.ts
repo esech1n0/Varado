@@ -1058,11 +1058,11 @@ export function buildWorld(scene: THREE.Scene): WorldData {
     arenaFloor.receiveShadow = true
     world.add(arenaFloor)
   }
-  legos.push({ x: ARENA.x + 955, y: 735, variant: 3 })
-  pickups.push({ kind: 'medkit', x: ARENA.x + 100, y: 130 }, { kind: 'medkit', x: ARENA.x + 100, y: 410 }, { kind: 'ammo', x: ARENA.x + 130, y: 270 })
-  const shipRect: Rect = { x: SHIP.x - 56, y: SHIP.y - 56, w: 112, h: 112, top: 215 }
+  legos.push({ x: ARENA.x + 1200, y: 680, variant: 3 })
+  pickups.push({ kind: 'medkit', x: ARENA.x + 150, y: 100 }, { kind: 'medkit', x: ARENA.x + 150, y: 440 }, { kind: 'ammo', x: ARENA.x + 200, y: 270 })
+  const shipRect: Rect = { x: SHIP.x - 70, y: SHIP.y - 70, w: 140, h: 140, top: 310 }
   solid(shipRect)
-  camps.push({ x: ARENA.x + 350, y: 270, soldier: 6, shooter: 2, spread: 220 })
+  camps.push({ x: ARENA.x + 500, y: 270, soldier: 6, shooter: 2, spread: 280 })
 
   // Refugios sueltos con distintas proporciones y alturas
   const shack = (id: string, name: string, x: number, y: number, w: number, d: number, h: number, side: DoorSpec['side'], pal = PAL.rust): void => {

@@ -19,8 +19,16 @@ export const BY1 = 630
 export const WORLD = { x0: ZC_END, x1: 12940, y0: -2515, y1: 3055 }
 export const ROAD_Y = 270
 export const ROAD_W = 300
-export const ARENA = { x: 11840, y: -230, w: 1000, h: 1000 }
-export const SHIP = { x: 12460, y: 270 }
+export const ARENA = { x: 11460, y: -430, w: 1400, h: 1400 }
+export const SHIP = { x: 12560, y: 270 }
+
+export const SPACE_LEVEL = {
+  duration: 180, // 3 minutos
+  playerSpeed: 360,
+  bulletSpeed: 950,
+  bulletDamage: 40,
+  rocketHp: 100,
+}
 
 export const MAX_HP = 100
 

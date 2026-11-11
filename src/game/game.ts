@@ -11,13 +11,14 @@ import {
   basic, makeAmmo, makeBeacon, makeBone, makeBuggy, makeFuelStone, makeGenerator, makeGun, makeImpostor, makeLego, makeMedkit, makePlayer, makeRocket, makeTurret,
   type ImpostorRig, type PlayerRig, type TurretRig,
 } from './gfx'
+import { SpaceLevel } from './spaceLevel'
 import { Hud, type RadarDot } from './hud'
 import { Input } from './input'
 import { instance, setBaseGlow } from './models'
 import { buildWorld, doorPanels, setDoor, type DoorRig, type FenceSpawn, type PlateSpawn, type WorldData } from './world'
 
 export type PickupKind = 'medkit' | 'ammo' | 'rifle' | 'shotgun' | 'pistol' | 'plasma' | 'sniper'
-export type Mode = 'menu' | 'play' | 'dead' | 'ending' | 'end'
+export type Mode = 'menu' | 'play' | 'dead' | 'ending' | 'space' | 'space_dead' | 'end'
 export type DeathCause = 'soldier' | 'shooter' | 'tank' | 'boss' | 'impostor' | 'turret' | 'fence' | 'plasma' | 'grenade'
 
 export interface FuelStone { x: number; y: number; z: number; taken: boolean; mesh: THREE.Group; glow: THREE.Mesh; ph: number }
@@ -84,9 +85,11 @@ export class Game {
   private chargeLine!: THREE.Mesh
   private arrowM!: THREE.Mesh
   private leverArrowM!: THREE.Mesh
+  private buggyBeaconM!: THREE.Group
   private door1!: DoorRig
   private door2!: DoorRig
   private wreckMs: THREE.Group[] = []
+  spaceLevel: SpaceLevel
 
   // dificultad y piedras ignífugas
   difficulty: DifficultyId = 'normal'
@@ -186,6 +189,7 @@ export class Game {
 
     this.dyn.add(this.playerM, this.buggyM, this.impM)
     this.playerM.traverse(o => (o.castShadow = true))
+    this.spaceLevel = new SpaceLevel(this.input)
     this.buildEntities()
     this.resize()
     addEventListener('resize', () => this.resize())
@@ -226,6 +230,7 @@ export class Game {
     this.renderer.setSize(w, h, false)
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
+    this.spaceLevel?.resize(w, h)
   }
 
   // ---------- Construcción de entidades ----------
@@ -445,6 +450,32 @@ export class Game {
     this.leverArrowM.rotation.x = Math.PI
     this.leverArrowM.position.set(W.lever.x, 62, W.lever.y)
     this.dyn.add(this.arrowM, this.leverArrowM)
+
+    // Baliza luminosa vertical del buggy visible a través de todo el mapa
+    this.buggyBeaconM = new THREE.Group()
+    const beamGeo = new THREE.CylinderGeometry(4, 6, 360, 14)
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: 0x57f2ff,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    const beamMesh = new THREE.Mesh(beamGeo, beamMat)
+    beamMesh.position.y = 180
+    const ringGeo = new THREE.TorusGeometry(20, 2.2, 8, 24)
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd21f, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+    const ring1 = new THREE.Mesh(ringGeo, ringMat)
+    ring1.rotation.x = Math.PI / 2
+    ring1.position.y = 50
+    const ring2 = new THREE.Mesh(ringGeo, ringMat)
+    ring2.rotation.x = Math.PI / 2
+    ring2.position.y = 120
+    const diamond = new THREE.Mesh(new THREE.OctahedronGeometry(11, 0), new THREE.MeshBasicMaterial({ color: 0xffd21f }))
+    diamond.position.y = 75
+    this.buggyBeaconM.add(beamMesh, ring1, ring2, diamond)
+    this.buggyBeaconM.visible = false
+    this.dyn.add(this.buggyBeaconM)
   }
 
   // ---------- Reinicio de partida ----------
@@ -555,11 +586,14 @@ export class Game {
         }
       }
     }
-    this.placeEnemy('boss', SHIP.x - 260, SHIP.y, false)
+    this.placeEnemy('boss', SHIP.x - 340, SHIP.y, false)
     this.hordeT = 16 / this.diff.spawn
     this.noiseT = 0
     this.shield.visible = true
     this.shipM.position.set(SHIP.x, 0, SHIP.y)
+    if (this.buggyBeaconM) this.buggyBeaconM.visible = false
+    this.hud.updateBuggyMarker(0, 0, 0, false)
+    this.spaceLevel?.showHud(false)
     this.ending = { t: 0, fade: false, shown: false }
     this.radioQ = []
     setMusicMode('menu')
@@ -738,12 +772,23 @@ export class Game {
   frame(dt: number): void {
     dt = Math.min(dt, 0.05)
     if (!this.paused) this.update(dt)
-    this.sync(dt)
-    this.renderer.render(this.scene, this.camera)
+    if (this.mode === 'space' || this.mode === 'space_dead') {
+      this.spaceLevel.render(this.renderer)
+    } else {
+      this.sync(dt)
+      this.renderer.render(this.scene, this.camera)
+    }
     this.input.endFrame()
   }
 
   private update(dt: number): void {
+    if (this.mode === 'space') {
+      this.spaceLevel.update(dt)
+      return
+    }
+    if (this.mode === 'space_dead') {
+      return
+    }
     this.t += dt
     this.fx.step(dt)
     this.shake = Math.max(0, this.shake - dt * 30)
@@ -991,7 +1036,7 @@ export class Game {
     if (inp.take('Digit4')) this.selectWeapon('sniper')
     if (inp.take('KeyQ')) this.cycleWeapon(1)
     if (inp.take('KeyZ')) {
-      if (this.p.weapon === 'sniper' && this.p.owned.sniper && !this.buggy.riding && this.p.alive) {
+      if (this.p.weapon === 'sniper' && this.p.owned.sniper && this.p.alive) {
         this.p.zoomed = !this.p.zoomed
         if (this.p.zoomed) achievements.add('zoom')
         sfx.weapon()
@@ -999,7 +1044,7 @@ export class Game {
         this.p.zoomed = false
       }
     }
-    if (this.p.weapon !== 'sniper' || this.buggy.riding || !this.p.alive) this.p.zoomed = false
+    if (this.p.weapon !== 'sniper' || !this.p.alive) this.p.zoomed = false
     const w = inp.consumeWheel()
     if (w) this.cycleWeapon(w > 0 ? 1 : -1)
   }
@@ -1017,10 +1062,28 @@ export class Game {
     this.selectWeapon(owned[(i + dir + owned.length) % owned.length])
   }
 
+  /** Calcula el punto objetivo en el espacio 3D exactamente alineado con la retícula del HUD */
+  private getCrosshairTarget(range = 750): THREE.Vector3 {
+    const camDir = new THREE.Vector3()
+    this.camera.getWorldDirection(camDir)
+    const camPos = this.camera.position
+
+    let targetDist = range
+    const estGz = this.world.heightAt(camPos.x + camDir.x * 200, camPos.z + camDir.z * 200)
+    if (camDir.y < -0.01) {
+      const floorD = (camPos.y - estGz) / -camDir.y
+      if (floorD > 30 && floorD < targetDist) targetDist = floorD
+    }
+    const hitWallD = rayDistance(this.grid, this.extra, camPos.x, camPos.z, camDir.x, camDir.z, targetDist)
+    if (hitWallD > 20 && hitWallD < targetDist) targetDist = hitWallD
+
+    return new THREE.Vector3().copy(camPos).addScaledVector(camDir, targetDist)
+  }
+
   private tryFire(dt: number): void {
     const p = this.p
     p.cd = Math.max(0, p.cd - dt)
-    if (this.buggy.riding || !p.alive || !this.input.fire) return
+    if (!p.alive || !this.input.fire) return
     const w = WEAPONS[p.weapon]
     if (!p.owned[w.id] || p.cd > 0) return
     if (w.id !== 'pistol') {
@@ -1041,36 +1104,49 @@ export class Game {
       this.fireSniper()
       return
     }
+
+    const ride = this.buggy.riding
+    const b = this.buggy
     const fx = Math.cos(this.yaw)
     const fz = Math.sin(this.yaw)
     const rx = -fz
     const rz = fx
-    const gz = this.world.heightAt(p.x, p.y)
-    const mxp = p.x + fx * 36 + rx * 4
-    const myp = p.y + fz * 36 + rz * 4
-    const mzp = gz + 28
-    const ax = p.x + rx * 26 + fx * 620
-    const ay = p.y + rz * 26 + fz * 620
-    const base = Math.atan2(ay - myp, ax - mxp)
-    const vPitch = -this.pitch
-    const cosV = Math.cos(vPitch)
-    const sinV = Math.sin(vPitch)
+    const gz = ride ? 0 : this.world.heightAt(p.x, p.y)
+    const mxp = ride ? b.x + fx * 38 + rx * 14 : p.x + fx * 36 + rx * 4
+    const myp = ride ? b.y + fz * 38 + rz * 14 : p.y + fz * 36 + rz * 4
+    const mzp = ride ? 28 : gz + 28
+
+    const target = this.getCrosshairTarget(750)
+    const mdx = target.x - mxp
+    const mdy = target.y - mzp
+    const mdz = target.z - myp
+    const dist = Math.hypot(mdx, mdy, mdz) || 1
+    const dirX = mdx / dist
+    const dirY = mdy / dist
+    const dirZ = mdz / dist
+
     for (let i = 0; i < w.pellets; i++) {
-      const a = base + (Math.random() - 0.5) * 2 * w.spread
       const spd = w.speed * (w.pellets > 1 ? rnd(0.9, 1.08) : 1)
+      const spH = (Math.random() - 0.5) * 2 * w.spread
+      const spV = (Math.random() - 0.5) * 2 * w.spread
+
+      const traj = new THREE.Vector3(dirX, dirY, dirZ)
+        .add(new THREE.Vector3(-dirZ * spH, spV, dirX * spH))
+        .normalize()
+
       const m = new THREE.Mesh(bulletGeo, bulletMats[w.id])
       m.scale.set(w.id === 'shotgun' ? 8 : 15, 2.6, 2.6)
       m.position.set(mxp, mzp, myp)
-      m.rotation.y = -a
-      m.rotation.z = vPitch
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), traj)
       this.projG.add(m)
+
       this.bullets.push({
         x: mxp,
         y: myp,
         z: mzp,
-        vx: Math.cos(a) * cosV * spd,
-        vy: Math.sin(a) * cosV * spd,
-        vz: sinV * spd,
+        vx: traj.x * spd,
+        vy: traj.z * spd,
+        vz: traj.y * spd,
         life: w.life,
         dmg: w.dmg,
         mesh: m,
@@ -1094,21 +1170,25 @@ export class Game {
     this.weaponKick = 0.18
     const p = this.p
     const w = WEAPONS.sniper
+    const ride = this.buggy.riding
+    const b = this.buggy
     const fx = Math.cos(this.yaw)
     const fz = Math.sin(this.yaw)
     const rx = -fz
     const rz = fx
-    const gz = this.world.heightAt(p.x, p.y)
-    const mxp = p.x + fx * (p.zoomed ? 12 : 38) + rx * (p.zoomed ? 0 : 4)
-    const myp = p.y + fz * (p.zoomed ? 12 : 38) + rz * (p.zoomed ? 0 : 4)
-    const ax = p.x + rx * 26 + fx * 620
-    const ay = p.y + rz * 26 + fz * 620
-    const a = p.zoomed ? this.yaw : Math.atan2(ay - myp, ax - mxp) + (Math.random() - 0.5) * 2 * w.spread
-    const dx = Math.cos(a)
-    const dy = Math.sin(a)
-    const vPitch = -this.pitch
-    const sinV = Math.sin(vPitch)
-    const startZ = gz + (p.zoomed ? 36 : 29)
+    const gz = ride ? 0 : this.world.heightAt(p.x, p.y)
+    const mxp = ride ? b.x + fx * 38 + rx * 14 : p.x + fx * (p.zoomed ? 12 : 38) + rx * (p.zoomed ? 0 : 4)
+    const myp = ride ? b.y + fz * 38 + rz * 14 : p.y + fz * (p.zoomed ? 12 : 38) + rz * (p.zoomed ? 0 : 4)
+    const startZ = ride ? 28 : gz + (p.zoomed ? 36 : 29)
+
+    const target = this.getCrosshairTarget(SNIPER.range)
+    const mdx = target.x - mxp
+    const mdy = target.y - startZ
+    const mdz = target.z - myp
+    const totalD = Math.hypot(mdx, mdy, mdz) || 1
+    const dx = mdx / totalD
+    const dy = mdz / totalD
+    const sinV = mdy / totalD
 
     let bestD = rayDistance(this.grid, this.extra, mxp, myp, dx, dy, SNIPER.range)
     if (sinV < -0.01) {
@@ -1228,7 +1308,7 @@ export class Game {
     const p = this.p
     p.grenadeCd = Math.max(0, p.grenadeCd - dt)
     if (!this.input.take('KeyG')) return
-    if (this.buggy.riding || !p.alive) return
+    if (!p.alive) return
     if (!p.hasGrenade) {
       this.hud.caption('Aún no tienes granadas de plasma', 1100)
       return
@@ -1242,10 +1322,17 @@ export class Game {
     p.grenades--
     p.grenadeCd = GRENADE.cooldown
     this.lastFireT = this.t
+    const riding = this.buggy.riding
+    const b = this.buggy
     const fx = Math.cos(this.yaw)
     const fz = Math.sin(this.yaw)
-    const x = p.x + fx * 22
-    const y = p.y + fz * 22
+    const baseX = riding ? b.x : p.x
+    const baseY = riding ? b.y : p.y
+    const x = baseX + fx * (riding ? 32 : 22)
+    const y = baseY + fz * (riding ? 32 : 22)
+    const z = riding ? 32 : 26
+    const bvx = riding ? Math.cos(b.h) * b.v * 0.45 : 0
+    const bvy = riding ? Math.sin(b.h) * b.v * 0.45 : 0
     const mesh = new THREE.Group()
     const core = new THREE.Mesh(projGeo, new THREE.MeshBasicMaterial({ color: 0x6dff4a }))
     core.scale.setScalar(5.5)
@@ -1253,9 +1340,9 @@ export class Game {
     light.scale.setScalar(10)
     const band = new THREE.Mesh(new THREE.TorusGeometry(5.8, 1.1, 6, 14), new THREE.MeshBasicMaterial({ color: 0x1b2a14 }))
     mesh.add(core, light, band)
-    mesh.position.set(x, 26, y)
+    mesh.position.set(x, z, y)
     this.projG.add(mesh)
-    this.grenades.push({ x, y, z: 26, vx: fx * GRENADE.throwSpeed + 0, vy: fz * GRENADE.throwSpeed, vz: 150, fuse: GRENADE.fuse, stuck: null, mesh, core, light })
+    this.grenades.push({ x, y, z, vx: fx * GRENADE.throwSpeed + bvx, vy: fz * GRENADE.throwSpeed + bvy, vz: 150, fuse: GRENADE.fuse, stuck: null, mesh, core, light })
     beep(300, 0.08, { type: 'triangle', vol: 0.06, slide: 120 })
     this.noiseT = Math.max(this.noiseT, 0.4)
   }
@@ -1549,6 +1636,10 @@ export class Game {
     e.t += dt
     const lift = e.t > 0.9 ? Math.pow(e.t - 0.9, 2) * 90 : 0
     this.shipM.position.set(SHIP.x + (e.t > 0.2 ? Math.sin(this.t * 60) * 1.2 : 0), lift, SHIP.y)
+    const stand = this.shipM.userData?.stand as THREE.Group | undefined
+    if (stand) {
+      stand.position.y = -lift
+    }
     if (e.t > 0.4) {
       this.fx.jet(SHIP.x + 70, SHIP.y, lift + 22, 5, 0xffa530, 320, 36, 0.6, 7)
       this.fx.jet(SHIP.x + 70, SHIP.y, lift + 22, 3, 0xfff2b0, 360, 20, 0.4, 5)
@@ -1559,14 +1650,50 @@ export class Game {
       e.fade = true
       this.hud.fade(true)
     }
-    if (e.t > 5 && !e.shown) {
+    if (e.t > 4.6 && !e.shown) {
       e.shown = true
-      this.mode = 'end'
-      this.hud.showHud(false)
-      this.hud.endScreen(this.statLines())
-      this.input.exitLock()
-      sfx.win()
+      this.hud.fade(false)
+      this.startLevel2()
     }
+  }
+
+  startLevel2(): void {
+    this.mode = 'space'
+    this.hud.fade(false)
+    this.hud.showHud(false)
+    if (this.buggyBeaconM) this.buggyBeaconM.visible = false
+    this.hud.updateBuggyMarker(0, 0, 0, false)
+    this.input.exitLock()
+    setMusicMode('boss')
+    this.spaceLevel.start({
+      onVictory: (stats) => {
+        this.mode = 'end'
+        this.spaceLevel.showHud(false)
+        const totalSec = Math.floor(this.runTime + stats.elapsed)
+        const m = Math.floor(totalSec / 60)
+        const s = Math.floor(totalSec % 60).toString().padStart(2, '0')
+        const lines = [
+          `Tiempo total <b>${m}:${s}</b>`,
+          `Destino <b>Planeta Júpiter alcanzado</b>`,
+          `Meteoritos destruidos <b>${stats.asteroidsDestroyed}</b>`,
+          `Puntuación espacial <b>${stats.score} pts</b>`,
+          `Aliens en tierra <b>${this.stats.kills}</b>`,
+          `Piezas LEGO <b>${this.stats.lego}/${LEGO_TOTAL}</b>`,
+        ]
+        this.hud.endScreen(lines)
+        sfx.win()
+      },
+      onDefeat: (stats) => {
+        this.mode = 'space_dead'
+        this.spaceLevel.showHud(false)
+        const lines = [
+          `Supervivencia espacial <b>${Math.floor(stats.elapsed)}s / 180s</b>`,
+          `Meteoritos destruidos <b>${stats.asteroidsDestroyed}</b>`,
+          `Puntuación <b>${stats.score} pts</b>`,
+        ]
+        this.hud.spaceDeadScreen(lines)
+      },
+    })
   }
 
   statLines(): string[] {
@@ -2887,11 +3014,26 @@ export class Game {
       this.playerM.position.set(b.x - Math.cos(b.h) * 8, 12, b.y - Math.sin(b.h) * 8)
       this.playerM.rotation.y = -b.h
       rig.legs.forEach(l => (l.rotation.z = 0))
-      rig.torso.rotation.set(0, 0, 0)
-      rig.headGroup.rotation.set(0, 0, 0)
-      rig.armR.rotation.set(0, 0.2, 0.2)
-      rig.armL.rotation.set(0, -0.2, 0.2)
-      rig.weaponMount.visible = false
+
+      const currentGunOwned = p.owned[p.weapon]
+      let diffYaw = -this.yaw - (-b.h)
+      while (diffYaw > Math.PI) diffYaw -= Math.PI * 2
+      while (diffYaw < -Math.PI) diffYaw += Math.PI * 2
+      const clampYaw = clamp(diffYaw, -1.3, 1.3)
+
+      rig.torso.rotation.set(-this.pitch * 0.3, clampYaw * 0.5, 0)
+      rig.headGroup.rotation.set(0, clampYaw * 0.5, 0)
+      rig.armL.rotation.set(0, -0.3, 0.35)
+
+      if (currentGunOwned) {
+        rig.weaponMount.visible = true
+        rig.weaponMount.position.set(10.5, 23.5, 7.0)
+        rig.weaponMount.rotation.set(-this.pitch * 0.7, clampYaw * 0.5, 0)
+        rig.armR.rotation.set(-this.pitch * 0.4, clampYaw * 0.5, 0.25)
+      } else {
+        rig.weaponMount.visible = false
+        rig.armR.rotation.set(0, 0.2, 0.2)
+      }
     } else {
       this.playerM.position.set(p.x, gz + Math.abs(Math.sin(p.walk)) * 1.2 * p.moving, p.y)
       this.playerM.rotation.y = -p.face
@@ -2919,7 +3061,7 @@ export class Game {
       } else if (p.weapon === 'pistol') {
         // Pistola a UNA mano (derecha); brazo izquierdo relajado al costado con balanceo natural
         rig.weaponMount.visible = true
-        rig.torso.rotation.set(0, lerp(0, -0.06, stance), 0)
+        rig.torso.rotation.set(-this.pitch * 0.25 * stance, lerp(0, -0.06, stance), 0)
         rig.headGroup.rotation.set(0, lerp(0, 0.06, stance), 0)
 
         const bobY = (1 - stance) * Math.sin(p.walk * 2) * 0.3 * p.moving
@@ -2929,9 +3071,9 @@ export class Game {
           lerp(9.5, 10.0, stance)
         )
         rig.weaponMount.rotation.set(
-          lerp(0, 0, stance),
+          lerp(0, -this.pitch * 0.75, stance),
           lerp(0.05, 0, stance),
-          lerp(-0.65, 0, stance) + kick
+          lerp(-0.25, 0, stance) + kick
         )
 
         rig.armR.rotation.set(
@@ -2945,7 +3087,7 @@ export class Game {
         // Reposo: Guardia baja táctica a dos manos (cruzada al pecho a ~35° hacia abajo)
         // Disparo: Postura táctica de tiro a dos manos con giro de perfil (~20°) y ambas manos en empuñadura y guardamanos
         rig.weaponMount.visible = true
-        rig.torso.rotation.set(0, lerp(0, -0.35, stance), 0)
+        rig.torso.rotation.set(-this.pitch * 0.35 * stance, lerp(0, -0.35, stance), 0)
         rig.headGroup.rotation.set(0, lerp(0, 0.35, stance), 0)
 
         const bobY = (1 - stance) * Math.sin(p.walk * 2) * 0.35 * p.moving
@@ -2955,9 +3097,9 @@ export class Game {
           lerp(-1.0, -1.5, stance)
         )
         rig.weaponMount.rotation.set(
-          lerp(-0.25, 0, stance),
-          lerp(0.40, 0.35, stance),
-          lerp(-0.60, 0, stance) + kick
+          lerp(-0.15, -this.pitch * 0.65, stance),
+          lerp(0.35, 0.35, stance),
+          lerp(-0.15, 0, stance) + kick
         )
 
         // Brazo derecho: mano en la empuñadura trasera
@@ -2974,7 +3116,7 @@ export class Game {
         )
       }
     }
-    for (const k of WEAPON_ORDER) rig.guns[k].visible = !riding && p.owned[k] && p.weapon === k
+    for (const k of WEAPON_ORDER) rig.guns[k].visible = p.owned[k] && p.weapon === k
 
     // buggy
     const bg = this.buggyM.userData as { wheels: THREE.Group[] }
@@ -2983,6 +3125,47 @@ export class Game {
     bg.wheels.forEach(w => (w.rotation.z = -b.spin))
     this.arrowM.visible = !riding && this.flags.impDead && !this.flags.boarded
     this.arrowM.position.set(b.x, 70 + Math.sin(this.t * 5) * 5, b.y)
+
+    // baliza del buggy en el cielo (marcador 3D)
+    if (this.buggyBeaconM) {
+      const showBeacon = !riding && this.flags.impDead && p.alive && this.mode === 'play'
+      this.buggyBeaconM.visible = showBeacon
+      if (showBeacon) {
+        this.buggyBeaconM.position.set(b.x, 0, b.y)
+        const diamond = this.buggyBeaconM.children[3]
+        if (diamond) diamond.rotation.y = this.t * 2.5
+        const r1 = this.buggyBeaconM.children[1]
+        const r2 = this.buggyBeaconM.children[2]
+        if (r1) r1.position.y = 45 + Math.sin(this.t * 3) * 15
+        if (r2) r2.position.y = 95 + Math.cos(this.t * 3.5) * 20
+      }
+    }
+
+    // marcador HUD del buggy con metros de distancia
+    const showMarker = !riding && this.flags.impDead && p.alive && this.mode === 'play'
+    if (showMarker) {
+      this.tmpV.set(b.x, 26, b.y)
+      const dist = Math.hypot(p.x - b.x, p.y - b.y)
+      const distM = Math.round(dist * 0.1)
+      this.tmpV.project(this.camera)
+
+      const halfW = window.innerWidth * 0.5
+      const halfH = window.innerHeight * 0.5
+      let sx = this.tmpV.x * halfW + halfW
+      let sy = -this.tmpV.y * halfH + halfH
+
+      if (this.tmpV.z > 1) {
+        sx = window.innerWidth - sx
+        sy = window.innerHeight - sy
+      }
+
+      const pad = 64
+      const cx = Math.max(pad, Math.min(window.innerWidth - pad, sx))
+      const cy = Math.max(pad, Math.min(window.innerHeight - pad, sy))
+      this.hud.updateBuggyMarker(cx, cy, distM, true)
+    } else {
+      this.hud.updateBuggyMarker(0, 0, 0, false)
+    }
 
     // escudo de la nave
     if (this.shield.visible) (this.shield.material as THREE.MeshBasicMaterial).opacity = 0.13 + Math.sin(this.t * 3) * 0.05
@@ -3265,7 +3448,7 @@ export class Game {
     if (im.state === 'chase' || im.state === 'forming') dots.push({ x: im.x, y: im.y, kind: 'enemy' })
     for (const s of this.world.sites) dots.push({ x: s.x + s.w / 2, y: s.y + s.d / 2, kind: 'site' })
     for (const b of this.beacons) dots.push({ x: b.x, y: b.y, kind: 'beacon' })
-    for (const l of this.legos) if (!l.taken && Math.hypot(l.x - p.x, l.y - p.y) < 340) dots.push({ x: l.x, y: l.y, kind: 'lego' })
+    for (const l of this.legos) if (!l.taken) dots.push({ x: l.x, y: l.y, kind: 'lego' })
     for (const k of this.pickups) if (!k.taken && Math.hypot(k.x - p.x, k.y - p.y) < 300) dots.push({ x: k.x, y: k.y, kind: 'pickup' })
     if (this.flags.boarded) dots.push({ x: SHIP.x, y: SHIP.y, kind: 'ship' })
     if (!this.buggy.riding) dots.push({ x: this.buggy.x, y: this.buggy.y, kind: 'buggy' })

@@ -1,4 +1,12 @@
 @font-face {
+  font-family: 'Legothick';
+  src: url('/fonts/Legothick.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'Audiowide';
   src: url('/fonts/Audiowide-Regular.ttf') format('truetype');
   font-display: swap;
@@ -46,7 +54,7 @@ body {
   overflow: hidden;
   background: #050818;
   color: #fff;
-  font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
+  font-family: 'Legothick', 'Barlow Semi Condensed', system-ui, sans-serif;
   -webkit-user-select: none;
   user-select: none;
   touch-action: none;
@@ -105,7 +113,7 @@ button {
 h1,
 h2,
 .btn {
-  font-family: 'Audiowide', 'Bangers', Impact, sans-serif;
+  font-family: 'Legothick', 'Audiowide', 'Bangers', Impact, sans-serif;
   letter-spacing: 0.04em;
 }
 
@@ -1586,4 +1594,245 @@ kbd {
     width: 58px;
     height: 58px;
   }
+}
+
+/* ========================================================
+   Marcador del Buggy en pantalla
+   ======================================================== */
+#buggy-marker {
+  position: fixed;
+  pointer-events: none;
+  z-index: 5;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: opacity 0.15s ease-out;
+}
+
+.buggy-marker-body {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 2px solid var(--cyan);
+  border-radius: 8px;
+  padding: 4px 10px;
+  box-shadow: 0 4px 14px rgba(87, 242, 255, 0.4), 0 0 0 1px var(--ink);
+  font-family: 'Legothick', 'Audiowide', sans-serif;
+}
+
+.buggy-ico {
+  font-size: 15px;
+}
+
+.buggy-txt {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--yellow);
+  letter-spacing: 0.05em;
+}
+
+.buggy-dst {
+  font-size: 13px;
+  color: var(--cyan);
+  background: rgba(87, 242, 255, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.buggy-arrow {
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 8px solid var(--cyan);
+  margin-top: -1px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+/* ========================================================
+   HUD Nivel 2: Galaga Espacial
+   ======================================================== */
+#space-hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  font-family: 'Legothick', 'Barlow Semi Condensed', sans-serif;
+}
+
+#space-top {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.space-card {
+  background: rgba(10, 16, 36, 0.88);
+  border: 2px solid rgba(87, 242, 255, 0.45);
+  border-radius: 10px;
+  padding: 8px 14px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(87, 242, 255, 0.1);
+}
+
+#space-hull {
+  width: min(340px, 48vw);
+}
+
+#space-hull .lbl,
+#space-score .lbl {
+  font-size: 13px;
+  color: var(--cyan);
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+#space-hull .bar {
+  position: relative;
+  height: 18px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1.5px solid var(--ink);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+#spaceHullFill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #3bd16f, #57f2ff);
+  box-shadow: 0 0 10px rgba(59, 209, 111, 0.6);
+  transition: width 0.2s ease-out;
+}
+
+#spaceHullFill.low {
+  background: linear-gradient(90deg, #e5384b, #ff7a22);
+  box-shadow: 0 0 10px rgba(229, 56, 75, 0.8);
+}
+
+#spaceHullNum {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px var(--ink);
+}
+
+#space-score b {
+  font-size: 22px;
+  color: var(--yellow);
+  text-shadow: 0 0 8px rgba(255, 210, 31, 0.5);
+}
+
+/* Barra de progreso inferior con mini cohete */
+#space-progress-wrap {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, 92vw);
+  background: rgba(8, 12, 28, 0.94);
+  border: 2px solid rgba(255, 210, 31, 0.6);
+  border-radius: 14px;
+  padding: 12px 18px 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 0 20px rgba(255, 210, 31, 0.2);
+}
+
+.prog-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.prog-meta .prog-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--paper);
+}
+
+#space-time {
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--yellow);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 2px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 210, 31, 0.3);
+  letter-spacing: 0.08em;
+}
+
+.prog-track {
+  position: relative;
+  height: 16px;
+  background: rgba(18, 24, 48, 0.9);
+  border: 1.5px solid rgba(87, 242, 255, 0.4);
+  border-radius: 8px;
+  overflow: visible;
+}
+
+#space-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #ff7a22, #ffd21f, #57f2ff);
+  border-radius: 7px;
+  box-shadow: 0 0 12px rgba(87, 242, 255, 0.6);
+  transition: width 0.1s linear;
+}
+
+#space-mini-rocket {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  filter: drop-shadow(0 0 8px rgba(87, 242, 255, 0.9));
+  transition: left 0.1s linear;
+}
+
+.rocket-icon {
+  font-size: 22px;
+  transform: rotate(45deg);
+  display: inline-block;
+}
+
+.rocket-trail {
+  position: absolute;
+  right: 14px;
+  width: 16px;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, #ff7a22, #ffd21f);
+  border-radius: 2px;
+  animation: pulse-trail 0.25s infinite alternate;
+}
+
+@keyframes pulse-trail {
+  0% { opacity: 0.4; width: 10px; }
+  100% { opacity: 1; width: 22px; }
+}
+
+#space-instruction {
+  position: absolute;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 14px;
+  border-radius: 6px;
+  pointer-events: none;
 }

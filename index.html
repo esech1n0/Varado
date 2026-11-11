@@ -7,6 +7,7 @@
     <title>Varado</title>
     <meta name="description" content="Astronauta aislado en un planeta infestado por aliens estilo Among Us. Encuentra las piedras ignífugas, repara el cohete y escapa. Aventura 3D de supervivencia con estética LEGO." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preload" href="/fonts/Legothick.ttf" as="font" type="font/ttf" crossorigin />
     <link rel="preload" href="/fonts/Audiowide-Regular.ttf" as="font" type="font/ttf" crossorigin />
     <link rel="preload" href="/fonts/Bangers-Regular.ttf" as="font" type="font/ttf" crossorigin />
   </head>
@@ -43,6 +44,42 @@
       <div id="toast"><div class="toast-head">¡LOGRO DESBLOQUEADO!</div><b id="toastTitle"></b><span id="toastDesc"></span></div>
       <div id="hurt"></div>
       <div id="fade"></div>
+      <div id="buggy-marker" class="hidden">
+        <div class="buggy-marker-body">
+          <span class="buggy-ico">🚙</span>
+          <span class="buggy-txt">BUGGY</span>
+          <span class="buggy-dst" id="buggyDstNum">0m</span>
+        </div>
+        <div class="buggy-arrow"></div>
+      </div>
+    </div>
+
+    <div id="space-hud" class="hidden">
+      <div id="space-top">
+        <div class="space-card" id="space-hull">
+          <div class="lbl">CASCO DEL COHETE</div>
+          <div class="bar"><div id="spaceHullFill"></div><div id="spaceHullNum">100%</div></div>
+        </div>
+        <div class="space-card" id="space-score">
+          <div class="lbl">METEORITOS</div>
+          <b id="spaceScoreNum">0</b>
+        </div>
+      </div>
+      <div id="space-progress-wrap">
+        <div class="prog-meta">
+          <span class="prog-label"><i class="planet-ico">🪐</i> PLANETA HOSTIL</span>
+          <span id="space-time">3:00</span>
+          <span class="prog-label"><i class="planet-ico">🪐</i> JÚPITER VECINO</span>
+        </div>
+        <div class="prog-track">
+          <div id="space-fill"></div>
+          <div id="space-mini-rocket" style="left: 0%;">
+            <span class="rocket-trail"></span>
+            <span class="rocket-icon">🚀</span>
+          </div>
+        </div>
+      </div>
+      <div id="space-instruction">Mover: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Disparo: <kbd>Espacio</kbd> o <kbd>Clic Izquierdo</kbd></div>
     </div>
 
     <div id="touch" class="hidden">
@@ -180,11 +217,23 @@
       </div>
     </div>
 
+    <div class="ovl hidden" id="ovl-space-dead">
+      <div class="panel danger">
+        <h2>¡COHETE DESTRUIDO!</h2>
+        <p class="story">
+          El cinturón de meteoritos destrozó el casco de la nave antes de alcanzar Júpiter.
+        </p>
+        <div class="stats" id="space-dead-stats"></div>
+        <button class="btn primary" id="btn-space-retry">Reintentar Nivel 2</button>
+        <button class="btn" id="btn-space-menu">Volver al menú</button>
+      </div>
+    </div>
+
     <div class="ovl hidden" id="ovl-end">
       <div class="panel win">
-        <h2>¡ESCAPASTE!</h2>
+        <h2>¡MISIÓN CUMPLIDA!</h2>
         <p class="story">
-          El cohete despega entre chispas y polvo. El combustible de las piedras ignífugas apenas alcanza para llegar al planeta más cercano… pero estás vivo.
+          ¡Has atravesado el peligroso cinturón de meteoritos y entrado con éxito en la órbita de Júpiter! La nave resistió el viaje y estás a salvo en el planeta vecino.
         </p>
         <a class="btn eval" id="eval-end" href="https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit" target="_blank" rel="noopener noreferrer">Evaluar el Juego</a>
         <div class="stats" id="end-stats"></div>
