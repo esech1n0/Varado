@@ -83,6 +83,19 @@ try {
   await page.waitForSelector('#ovl-settings', { state: 'hidden' })
   console.log('smoke: settings modal verified')
 
+  // Check skins (Aspecto) modal: 8 skins, 4 of them locked behind achievements
+  await page.click('#btn-menu-skins')
+  await page.waitForSelector('#ovl-skins:not(.hidden)')
+  const skinCount = await page.locator('.skin-card').count()
+  const lockedCount = await page.locator('.skin-card.locked').count()
+  if (skinCount !== 8 || lockedCount !== 4) throw new Error(`expected 8 skins / 4 locked, got ${skinCount} / ${lockedCount}`)
+  await page.click('.skin-card[data-skin="blue"]')
+  await page.waitForSelector('.skin-card.sel[data-skin="blue"]')
+  await page.screenshot({ path: `${out}/03b-skins.png` })
+  await page.click('#btn-skins-back')
+  await page.waitForSelector('#ovl-skins', { state: 'hidden' })
+  console.log('smoke: skins modal verified')
+
   // Click JUGAR to open difficulty selection
   await page.click('#btn-play')
   await page.waitForSelector('#ovl-diff:not(.hidden)')
@@ -91,6 +104,15 @@ try {
 
   // Select Normal difficulty
   await page.click('button[data-diff="normal"]')
+
+  // Intro comic panels: advance through the five panels, then the game starts
+  await page.waitForSelector('#intro:not(.hidden)')
+  await page.waitForTimeout(1200)
+  await page.screenshot({ path: `${out}/04b-intro.png` })
+  for (let i = 0; i < 5; i += 1) {
+    await page.waitForTimeout(450)
+    await page.keyboard.press('Space')
+  }
   await page.waitForSelector('#hud:not(.hidden)', { timeout: 10_000 })
   console.log('smoke: HUD active')
 

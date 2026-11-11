@@ -137,11 +137,22 @@ export class SpaceLevel {
 
     // Fuego de los propulsores
     this.thrusters = new THREE.Group()
-    const flameMat = new THREE.MeshBasicMaterial({ color: 0xffaa22, transparent: true, opacity: 0.85 })
-    const flameCore = new THREE.Mesh(new THREE.ConeGeometry(5, 20, 8), flameMat)
-    flameCore.rotation.x = Math.PI
-    flameCore.position.y = -8
-    this.thrusters.add(flameCore)
+    // Una llama por tobera, centrada en su eje y con la base pegada a la boca de la tobera
+    const flame = (x: number, r: number, len: number, color: number, opacity: number): void => {
+      const geo = new THREE.ConeGeometry(r, len, 12)
+      geo.rotateX(Math.PI)
+      geo.translate(0, -len / 2, 0) // el origen queda en la base: al escalar, la llama crece hacia atrás
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }))
+      m.position.set(x, 0, 0)
+      this.thrusters.add(m)
+    }
+    flame(0, 18, 95, 0xff8a1f, 0.85)
+    flame(0, 9, 60, 0xfff2b0, 0.9)
+    for (const sx of [-22, 22]) {
+      flame(sx, 11, 55, 0x35b8ff, 0.8)
+      flame(sx, 5, 34, 0xd8f6ff, 0.85)
+    }
+    this.thrusters.position.y = 3
     this.rocket.add(this.thrusters)
 
     // Geometrías para meteoritos

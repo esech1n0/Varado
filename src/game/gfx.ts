@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { seeded } from './geom'
+import { skinDef, type SkinId } from './skins'
 
 // ---------- Materiales y piezas ----------
 const matCache = new Map<string, THREE.MeshStandardMaterial>()
@@ -147,7 +148,7 @@ export function makeGun(kind: GunKind): THREE.Group {
 // ---------- Texturas procedurales del astronauta y armas ----------
 // Mapas "de multiplicación" (blanco = sin cambio): añaden costuras, desgaste, suciedad y relieve
 // sin alterar los colores ni las formas originales del personaje.
-type DetailKind = 'suit' | 'pack' | 'trim' | 'boot' | 'helmet' | 'gunbody' | 'gungrip' | 'gunwood' | 'gunbarrel'
+type DetailKind = 'suit' | 'suitworn' | 'pack' | 'trim' | 'boot' | 'helmet' | 'gunbody' | 'gungrip' | 'gunwood' | 'gunbarrel'
 const detailCache = new Map<DetailKind, THREE.CanvasTexture>()
 const detailMats = new Map<string, THREE.MeshStandardMaterial>()
 
@@ -204,6 +205,57 @@ function detailTex(kind: DetailKind): THREE.CanvasTexture {
       g.arc(r() * S, r() * S, 3 + r() * 9, 0, 7)
       g.fill()
     }
+  } else if (kind === 'suitworn') {
+    // traje veterano: mugre pesada, quemaduras, desgarros con el aislante a la vista y remiendos cosidos
+    for (let i = 0; i < 26; i++) {
+      g.fillStyle = `rgba(${r() < 0.5 ? '120,95,60' : '70,60,50'},${0.12 + r() * 0.2})`
+      g.beginPath()
+      g.ellipse(r() * S, r() * S, 5 + r() * 18, 3 + r() * 10, r() * 3, 0, 7)
+      g.fill()
+    }
+    for (let i = 0; i < 3; i++) {
+      const x = 20 + r() * (S - 40)
+      const y = 20 + r() * (S - 40)
+      const sc = g.createRadialGradient(x, y, 0, x, y, 16 + r() * 10)
+      sc.addColorStop(0, 'rgba(20,16,14,.75)')
+      sc.addColorStop(1, 'rgba(60,45,30,0)')
+      g.fillStyle = sc
+      g.fillRect(0, 0, S, S)
+    }
+    for (let i = 0; i < 5; i++) {
+      // desgarro dentado
+      let x = 12 + r() * (S - 24)
+      let y = 12 + r() * (S - 50)
+      const pts: [number, number][] = [[x, y]]
+      const n = 5 + Math.floor(r() * 4)
+      for (let k = 0; k < n; k++) {
+        x += (r() - 0.5) * 12
+        y += 4 + r() * 6
+        pts.push([x, y])
+      }
+      const path = (dx: number): void => {
+        g.beginPath()
+        pts.forEach(([px, py], k) => (k ? g.lineTo(px + (k % 2 ? dx : -dx), py) : g.moveTo(px, py)))
+      }
+      g.setLineDash([])
+      path(2.2)
+      g.strokeStyle = 'rgba(205,120,50,.8)'
+      g.lineWidth = 5
+      g.stroke()
+      path(1.2)
+      g.strokeStyle = 'rgba(25,20,22,.92)'
+      g.lineWidth = 2.6
+      g.stroke()
+    }
+    // remiendo cosido
+    g.fillStyle = 'rgba(120,125,135,.55)'
+    g.fillRect(S * 0.56, S * 0.58, 30, 22)
+    g.strokeStyle = 'rgba(40,40,48,.8)'
+    g.lineWidth = 1.4
+    g.setLineDash([3, 3])
+    g.strokeRect(S * 0.56 + 2, S * 0.58 + 2, 26, 18)
+    g.setLineDash([])
+    for (let i = 0; i < 14; i++) line(r() * S, r() * S, r() * S, r() * S, `rgba(90,85,80,${0.25 + r() * 0.25})`, 0.9)
   } else if (kind === 'pack') {
     for (let i = 0; i < 7; i++) line(14, 18 + i * 14, S - 14, 18 + i * 14, 'rgba(30,32,40,.5)', 3)
     for (const [x, y] of [[8, 8], [S - 8, 8], [8, S - 8], [S - 8, S - 8]]) {
@@ -308,13 +360,6 @@ function detailMat(color: number, kind: DetailKind, opts: THREE.MeshStandardMate
   return m
 }
 
-/** Caja del astronauta con el mismo color y forma que `box`, pero con textura de detalle. */
-function tbox(w: number, h: number, d: number, color: number, kind: DetailKind, x = 0, y = 0, z = 0): THREE.Mesh {
-  const m = box(w, h, d, color, x, y, z)
-  m.material = detailMat(color, kind)
-  return m
-}
-
 // ---------- Astronauta (jugador) ----------
 export type PlayerRig = {
   legs: THREE.Group[]
@@ -328,67 +373,194 @@ export type PlayerRig = {
   weaponMount: THREE.Group
 }
 
-export function makePlayer(): THREE.Group {
+/** Entorno procedural (equirectangular) que refleja el visor: cielo oscuro, horizonte brillante y suelo anaranjado. */
+let visorEnv: THREE.CanvasTexture | null = null
+function visorEnvMap(): THREE.CanvasTexture {
+  if (visorEnv) return visorEnv
+  const c = document.createElement('canvas')
+  c.width = 256
+  c.height = 128
+  const g = c.getContext('2d')!
+  const sky = g.createLinearGradient(0, 0, 0, 128)
+  sky.addColorStop(0, '#0a0d24')
+  sky.addColorStop(0.36, '#3b4a86')
+  sky.addColorStop(0.49, '#ffe9c2')
+  sky.addColorStop(0.53, '#ff9a4a')
+  sky.addColorStop(0.7, '#8a4a20')
+  sky.addColorStop(1, '#241208')
+  g.fillStyle = sky
+  g.fillRect(0, 0, 256, 128)
+  // soles / focos que dan los brillos del visor
+  for (const [x, y, r, a] of [[70, 34, 26, 1], [190, 46, 16, 0.8], [130, 20, 10, 0.6]]) {
+    const s = g.createRadialGradient(x, y, 0, x, y, r)
+    s.addColorStop(0, `rgba(255,255,255,${a})`)
+    s.addColorStop(0.35, `rgba(255,236,190,${a * 0.6})`)
+    s.addColorStop(1, 'rgba(255,220,160,0)')
+    g.fillStyle = s
+    g.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  const t = new THREE.CanvasTexture(c)
+  t.mapping = THREE.EquirectangularReflectionMapping
+  t.colorSpace = THREE.SRGBColorSpace
+  visorEnv = t
+  return t
+}
+
+let visorMatCache: THREE.MeshStandardMaterial | null = null
+function visorMat(): THREE.MeshStandardMaterial {
+  visorMatCache ??= new THREE.MeshStandardMaterial({
+    color: 0xc4560a,
+    metalness: 0.92,
+    roughness: 0.1,
+    envMap: visorEnvMap(),
+    envMapIntensity: 1.35,
+    emissive: 0x4a1a00,
+    emissiveIntensity: 0.75,
+  })
+  return visorMatCache
+}
+
+/**
+ * Astronauta con traje presurizado: casco con visor naranja oscuro reflectante que cubre el rostro,
+ * mochila de soporte vital, unidad de control en el pecho, anillos de unión y guantes/botas.
+ * Mantiene los mismos pivotes que usa la animación (hombros, manos, piernas, cabeza).
+ */
+export function makePlayer(skinId: SkinId = 'white'): THREE.Group {
+  const sk = skinDef(skinId)
   const g = new THREE.Group()
-  const w = 0xf6f6f2
-  const ye = 0xffc61a
+  const armor = sk.style === 'armor'
+  const worn = sk.style === 'worn'
+  const suitKind: DetailKind = worn ? 'suitworn' : 'suit'
+  const under = 0x23272b
+  const suitM = detailMat(sk.suit, suitKind)
+  // en la armadura, las extremidades son un mono oscuro y las placas llevan el color
+  const limbM = armor ? detailMat(under, 'boot') : suitM
+  const jointM = detailMat(sk.joint, 'boot')
+  const accentM = detailMat(sk.accent, 'trim')
+  const packM = detailMat(sk.pack, 'pack')
+  const gloveM = detailMat(sk.glove, 'boot')
+  const helmM = detailMat(sk.helmet, worn ? 'suitworn' : 'helmet', { roughness: 0.38 })
+  const metalM = mat(sk.style === 'outline' ? 0x8d939f : 0xc9ced8, { metalness: 0.75, roughness: 0.3 })
+  const darkM = mat(0x16181d, { roughness: 0.7 })
+  const hullM = sk.style === 'outline' ? new THREE.MeshBasicMaterial({ color: 0x9aa0ab, side: THREE.BackSide }) : null
+
+  /** Añade una pieza; con el aspecto de contornos le pone además un casco invertido gris alrededor. */
+  const put = (parent: THREE.Object3D, geo: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0, hull = true): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, material)
+    m.position.set(x, y, z)
+    m.castShadow = true
+    m.receiveShadow = true
+    parent.add(m)
+    if (hullM && hull) {
+      const h = new THREE.Mesh(geo, hullM)
+      h.scale.setScalar(1.09)
+      m.add(h)
+    }
+    return m
+  }
+  const B = (w: number, h: number, d: number): THREE.BoxGeometry => new THREE.BoxGeometry(w, h, d)
+  const C = (rt: number, rb: number, h: number, seg = 14): THREE.CylinderGeometry => new THREE.CylinderGeometry(rt, rb, h, seg)
+  const S = (r: number, seg = 16): THREE.SphereGeometry => new THREE.SphereGeometry(r, seg, Math.max(8, seg - 4))
+  const light = (color: number): THREE.MeshStandardMaterial => mat(color, { emissive: color, emissiveIntensity: 1.1 })
+
+  // ----- Piernas -----
   const legs: THREE.Group[] = []
   for (const s of [-1, 1]) {
     const lg = new THREE.Group()
     lg.position.set(0, 14, s * 5)
-    lg.add(tbox(8, 14, 8, w, 'suit', 0, -7, 0))
-    lg.add(tbox(10, 3, 9, 0xbfc3cc, 'boot', 1, -14.5, 0))
+    put(lg, C(4.5, 4.3, 12.5, 12), limbM, 0, -5.4, 0)
+    put(lg, C(4.75, 4.75, 2.2, 12), jointM, 0, -5.6, 0, false) // rodillera
+    put(lg, C(4.7, 4.7, 1.4, 12), metalM, 0, -10.6, 0, false) // anillo de la bota
+    put(lg, B(11, 4, 9), gloveM, 1.3, -12.8, 0)
+    put(lg, B(11.8, 1.5, 9.6), darkM, 1.3, -14.6, 0, false) // suela
+    if (armor) {
+      put(lg, B(9.4, 5.2, 9.6), suitM, 0.4, -2.6, 0)
+      put(lg, B(9.2, 4.4, 9.4), suitM, 0.6, -8.6, 0)
+    }
+    if (worn && s === 1) put(lg, B(0.5, 5, 3.2), darkM, 4.5, -3.4, 0.6, false).rotation.x = 0.35 // desgarro en el muslo
     g.add(lg)
     legs.push(lg)
   }
+
+  // ----- Torso -----
   const torso = new THREE.Group()
   g.add(torso)
-  torso.add(tbox(13, 5, 19, w, 'suit', 0, 16.5, 0))
-  torso.add(tbox(12, 17, 21, w, 'suit', 0, 27, 0))
-  torso.add(box(0.6, 6, 6, 0x6e7480, 6.2, 30, 3))
-  torso.add(tbox(7, 17, 14, 0x8c919c, 'pack', -9.5, 28, 0))
+  const oval = (m: THREE.Mesh): THREE.Mesh => {
+    m.scale.set(0.72, m.scale.y, 1.12)
+    return m
+  }
+  oval(put(torso, C(8.6, 8.2, 6, 18), limbM, 0, 16.5, 0)) // cadera
+  oval(put(torso, C(9.7, 9.7, 2.2, 18), accentM, 0, 19.8, 0, false)) // cinturón
+  oval(put(torso, C(9.4, 9.2, 15.5, 18), suitM, 0, 28, 0)) // tronco
+  const shoulders = oval(put(torso, S(9.4, 18), suitM, 0, 35.6, 0))
+  shoulders.scale.y = 0.42
+  put(torso, C(9.2, 9.2, 2.2, 18), metalM, 0, 36.4, 0, false) // anillo del cuello
 
-  // Brazo derecho articulado (hombro Z = +10.5, lado derecho del personaje)
-  const armR = new THREE.Group()
-  armR.position.set(0, 28.5, 10.5)
-  const shoulderR = cyl(3.2, 3.2, 4.8, w, 10)
-  shoulderR.rotation.x = Math.PI / 2
-  shoulderR.material = detailMat(w, 'suit')
-  armR.add(shoulderR)
-  armR.add(tbox(14, 4.6, 4.6, w, 'suit', 6.8, 0, 0))
-  const handR = new THREE.Group()
-  handR.position.set(13.8, 0, 0)
-  const cuffR = cyl(2.5, 2.5, 2, 0xd4d7dc, 10)
-  cuffR.rotation.z = Math.PI / 2
-  cuffR.position.set(-0.5, 0, 0)
-  const clampR = cyl(2.8, 2.8, 4, ye, 12)
-  clampR.material = detailMat(ye, 'trim')
-  clampR.rotation.x = Math.PI / 2
-  clampR.position.set(1.5, 0, 0)
-  handR.add(cuffR, clampR)
-  armR.add(handR)
-  torso.add(armR)
+  // unidad de control del pecho con indicadores luminosos
+  put(torso, B(2.8, 7, 9.5), packM, 6.7, 28.4, 0)
+  put(torso, B(0.7, 1.3, 1.3), light(0xff4040), 8.3, 30.2, -2.8, false)
+  put(torso, B(0.7, 1.3, 1.3), light(0x40ff80), 8.3, 30.2, 0, false)
+  put(torso, B(0.7, 1.3, 1.3), light(0x57f2ff), 8.3, 30.2, 2.8, false)
+  put(torso, B(0.6, 2, 6.4), darkM, 8.3, 27, 0, false)
+  // franja del color del traje cruzando el pecho
+  if (!armor) put(torso, B(0.5, 1.6, 15), accentM, 6.6, 33.2, 0, false)
 
-  // Brazo izquierdo articulado (hombro Z = -10.5, lado izquierdo del personaje)
-  const armL = new THREE.Group()
-  armL.position.set(0, 28.5, -10.5)
-  const shoulderL = cyl(3.2, 3.2, 4.8, w, 10)
-  shoulderL.rotation.x = Math.PI / 2
-  shoulderL.material = detailMat(w, 'suit')
-  armL.add(shoulderL)
-  armL.add(tbox(14, 4.6, 4.6, w, 'suit', 6.8, 0, 0))
-  const handL = new THREE.Group()
-  handL.position.set(13.8, 0, 0)
-  const cuffL = cyl(2.5, 2.5, 2, 0xd4d7dc, 10)
-  cuffL.rotation.z = Math.PI / 2
-  cuffL.position.set(-0.5, 0, 0)
-  const clampL = cyl(2.8, 2.8, 4, ye, 12)
-  clampL.material = detailMat(ye, 'trim')
-  clampL.rotation.x = Math.PI / 2
-  clampL.position.set(1.5, 0, 0)
-  handL.add(cuffL, clampL)
-  armL.add(handL)
-  torso.add(armL)
+  // mochila de soporte vital (PLSS) con tanques, placa y antena
+  put(torso, B(8, 19, 15.5), packM, -10.6, 28.6, 0)
+  put(torso, B(8.3, 2, 15.8), accentM, -10.6, 36.2, 0, false)
+  for (const s of [-1, 1]) {
+    put(torso, C(2.3, 2.3, 13, 10), metalM, -15.2, 27.4, s * 4.2, false)
+    // manguera de la mochila al casco
+    const hose = put(torso, new THREE.TorusGeometry(3.6, 0.85, 6, 12, Math.PI), jointM, -12.6, 39.2, s * 4.4, false)
+    hose.castShadow = false
+  }
+  put(torso, C(0.35, 0.35, 11, 5), darkM, -12.6, 43.5, -6.4, false)
+  put(torso, S(0.9, 8), light(0xff3b4a), -12.6, 49.2, -6.4, false)
+
+  if (armor) {
+    put(torso, B(3.2, 11.5, 18), suitM, 5.6, 29.4, 0) // peto
+    put(torso, B(1.2, 2, 12), accentM, 7.4, 33.6, 0, false)
+  }
+  if (worn) {
+    // jirones, parches de cinta y una tira de tela colgando
+    put(torso, B(0.5, 6.5, 3), darkM, 6.2, 24, -5.4, false).rotation.x = -0.4
+    put(torso, B(0.6, 3, 5), mat(0x7d8087, { roughness: 0.8 }), 6.5, 33, 5.2, false).rotation.x = 0.25
+    put(torso, B(0.5, 8, 2.4), suitM, -14.9, 17.5, 5.5, false).rotation.z = 0.25
+  }
+
+  // ----- Brazos (el hombro es el pivote; el brazo se extiende hacia +X) -----
+  const makeArm = (side: number): { arm: THREE.Group; hand: THREE.Group } => {
+    const arm = new THREE.Group()
+    arm.position.set(0, 28.5, side * 10.5)
+    put(arm, S(3.7, 12), suitM)
+    const sleeve = put(arm, new THREE.CapsuleGeometry(2.7, 9.4, 4, 10), limbM, 6.6, 0, 0)
+    sleeve.rotation.z = Math.PI / 2
+    const band = put(arm, C(2.98, 2.98, 1.7, 10), accentM, 3.7, 0, 0, false)
+    band.rotation.z = Math.PI / 2
+    const elbow = put(arm, C(3.05, 3.05, 2.3, 10), jointM, 7.4, 0, 0, false)
+    elbow.rotation.z = Math.PI / 2
+    if (armor) {
+      const pauldron = put(arm, S(4.9, 12), suitM, 0.4, 0.8, side * 0.6)
+      pauldron.scale.set(1.05, 0.82, 1)
+      put(arm, B(4.6, 6, 6), suitM, 10.6, 0, 0)
+    }
+    if (worn && side === -1) {
+      const tape = put(arm, C(3.0, 3.0, 2, 10), mat(0x7d8087, { roughness: 0.8 }), 10.6, 0, 0, false)
+      tape.rotation.z = Math.PI / 2
+    }
+    const hand = new THREE.Group()
+    hand.position.set(13.8, 0, 0)
+    const wrist = put(hand, C(2.9, 2.9, 1.5, 10), metalM, -0.9, 0, 0, false)
+    wrist.rotation.z = Math.PI / 2
+    const glove = put(hand, S(2.9, 10), gloveM, 1.5, 0, 0)
+    glove.scale.set(1.15, 0.95, 1)
+    put(hand, S(1.15, 8), gloveM, 1.6, 1.6, -side * 1.9, false) // pulgar
+    arm.add(hand)
+    torso.add(arm)
+    return { arm, hand }
+  }
+  const { arm: armR, hand: handR } = makeArm(1)
+  const { arm: armL, hand: handL } = makeArm(-1)
 
   // Soporte de armas montado en torso
   const weaponMount = new THREE.Group()
@@ -406,26 +578,42 @@ export function makePlayer(): THREE.Group {
     weaponMount.add(guns[k])
   }
 
-  // Cabeza y visor articulados
+  // ----- Casco con visor naranja oscuro reflectante (tapa por completo el rostro) -----
   const headGroup = new THREE.Group()
   headGroup.position.set(0, 44, 0)
-  const head = ball(11, 0xffffff, {}, 22)
-  head.material = detailMat(0xffffff, 'helmet')
-  head.scale.set(1, 1.05, 1)
-  headGroup.add(head)
+  const shell = put(headGroup, S(11, 24), helmM)
+  shell.scale.set(1, 1.05, 1)
 
-  const face = ball(7, ye, { emissive: 0x553a00 })
-  face.position.set(7.2, 0, 0)
-  face.scale.set(0.55, 0.95, 1.1)
-  headGroup.add(face)
+  const visorPos = new THREE.Vector3(3.5, 0.3, 0)
+  const visorScale = new THREE.Vector3(1, 0.93, 1.06)
+  const vis = put(headGroup, new THREE.SphereGeometry(9.2, 28, 20), visorMat(), visorPos.x, visorPos.y, visorPos.z, false)
+  vis.scale.copy(visorScale)
+  vis.castShadow = false
 
-  const vis = new THREE.Mesh(
-    new THREE.SphereGeometry(7.6, 16, 12),
-    new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.28, roughness: 0.1 }),
-  )
-  vis.position.copy(face.position)
-  vis.scale.copy(face.scale)
-  headGroup.add(vis)
+  // reflejos: dos destellos claros pegados a la superficie del visor
+  const glintMat = (opacity: number): THREE.MeshBasicMaterial =>
+    new THREE.MeshBasicMaterial({ color: 0xfff1d8, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending })
+  const glint = (phi0: number, phiLen: number, th0: number, thLen: number, opacity: number): void => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(9.32, 10, 6, phi0, phiLen, th0, thLen), glintMat(opacity))
+    m.position.copy(visorPos)
+    m.scale.copy(visorScale)
+    headGroup.add(m)
+  }
+  glint(Math.PI + 0.22, 0.42, 0.98, 0.3, 0.62)
+  glint(Math.PI + 0.7, 0.12, 1.02, 0.22, 0.5)
+  glint(Math.PI - 0.62, 0.3, 1.72, 0.16, 0.28)
+
+  // marco del visor, protectores laterales y cresta superior
+  const rim = put(headGroup, new THREE.TorusGeometry(8.55, 0.95, 8, 28), jointM, 7.0, 0.3, 0, false)
+  rim.rotation.y = Math.PI / 2
+  rim.scale.set(1.06, 0.95, 1)
+  for (const s of [-1, 1]) {
+    const ear = put(headGroup, C(2.7, 2.7, 1.8, 12), accentM, 0, 0, s * 10.6, false)
+    ear.rotation.x = Math.PI / 2
+  }
+  put(headGroup, B(7, 1.6, 3.2), packM, 0.5, 11.2, 0, false)
+  put(headGroup, B(1.6, 1.2, 2.2), light(0xfff3c0), 4.6, 11, 0, false) // foco frontal
+  if (armor) put(headGroup, B(12, 2.2, 4.2), suitM, -1, 11.4, 0)
 
   torso.add(headGroup)
 

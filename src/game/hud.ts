@@ -4,8 +4,8 @@ import { ACHIEVEMENTS, achievements, type AchievementDef } from './achievements'
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T
 
 export type RadarDot = { x: number; y: number; kind: 'enemy' | 'site' | 'beacon' | 'ship' | 'lego' | 'buggy' | 'boss' | 'pickup' | 'fuel' }
-export type OverlayId = 'start' | 'diff' | 'ach' | 'pause' | 'settings' | 'dead' | 'end' | 'space-dead'
-const OVERLAYS: OverlayId[] = ['start', 'diff', 'ach', 'pause', 'settings', 'dead', 'end', 'space-dead']
+export type OverlayId = 'start' | 'diff' | 'ach' | 'skins' | 'pause' | 'settings' | 'dead' | 'end' | 'space-dead'
+const OVERLAYS: OverlayId[] = ['start', 'diff', 'ach', 'skins', 'pause', 'settings', 'dead', 'end', 'space-dead']
 
 export class Hud {
   private capTimer = 0
@@ -78,11 +78,24 @@ export class Hud {
   /** Aviso emergente al desbloquear un logro. */
   toast(a: AchievementDef): void {
     const el = $('toast')
+    el.classList.remove('perk')
+    el.querySelector('.toast-head')!.textContent = '¡LOGRO DESBLOQUEADO!'
     $('toastTitle').textContent = a.title
     $('toastDesc').textContent = a.desc
     el.classList.add('on')
     clearTimeout(this.toastTimer)
     this.toastTimer = window.setTimeout(() => el.classList.remove('on'), 4200)
+  }
+
+  /** Aviso emergente de beneficio LEGO (reutiliza la tarjeta de logros). */
+  perk(head: string, text: string): void {
+    const el = $('toast')
+    el.querySelector('.toast-head')!.textContent = head
+    $('toastTitle').textContent = text
+    $('toastDesc').textContent = ''
+    el.classList.add('on', 'perk')
+    clearTimeout(this.toastTimer)
+    this.toastTimer = window.setTimeout(() => el.classList.remove('on'), 5200)
   }
 
   /** Dibuja la lista de logros con su barra de progreso verde 0/n. */
@@ -110,6 +123,7 @@ export class Hud {
 
   setLego(n: number, pop = false): void {
     $('legoN').textContent = String(n)
+    document.querySelectorAll<HTMLElement>('#legoPerks i').forEach(el => el.classList.toggle('on', n >= Number(el.dataset.n)))
     if (pop) {
       const el = $('lego')
       el.classList.remove('pop')
@@ -124,14 +138,15 @@ export class Hud {
     $('objective').innerHTML = html
   }
 
-  setStamina(v: number, max: number, exhausted: boolean): void {
+  setStamina(v: number, max: number, exhausted: boolean, boosted = false, free = false): void {
     const f = Math.max(0, Math.min(1, v / max))
-    const key = `${Math.round(f * 200)}|${exhausted}`
+    const key = `${Math.round(f * 200)}|${exhausted}|${boosted}|${free}`
     if (key === this.lastStamina) return
     this.lastStamina = key
     const fill = $('stfill')
     fill.style.width = `${f * 100}%`
-    fill.className = exhausted ? 'tired' : f < 0.3 ? 'low' : ''
+    fill.className = free ? 'free' : exhausted ? 'tired' : f < 0.3 ? 'low' : ''
+    $('stam').classList.toggle('boost', boosted)
   }
 
   setScope(on: boolean): void {
@@ -141,8 +156,8 @@ export class Hud {
   }
 
   /** Sólo se muestran las armas que el jugador ya recogió; las demás no aparecen. */
-  setWeapons(owned: Record<WeaponId, boolean>, ammo: Record<AmmoWeapon, number>, sel: WeaponId, show: boolean, hasGrenade: boolean, grenades: number): void {
-    const key = JSON.stringify([owned, ammo, sel, show, hasGrenade, grenades, this.scoped])
+  setWeapons(owned: Record<WeaponId, boolean>, ammo: Record<AmmoWeapon, number>, sel: WeaponId, show: boolean, hasGrenade: boolean, grenades: number, infinite = false): void {
+    const key = JSON.stringify([owned, ammo, sel, show, hasGrenade, grenades, this.scoped, infinite])
     if (key === this.lastWeapons) return
     this.lastWeapons = key
     const anyGun = owned.pistol || owned.rifle || owned.shotgun || owned.sniper
@@ -150,13 +165,13 @@ export class Hud {
     const slots = show
       ? WEAPON_ORDER.filter(id => owned[id]).map(id => {
           const w = WEAPONS[id]
-          const a = id === 'pistol' ? '∞' : String(ammo[id as AmmoWeapon])
-          const empty = id !== 'pistol' && ammo[id as AmmoWeapon] <= 0
+          const a = id === 'pistol' || infinite ? '∞' : String(ammo[id as AmmoWeapon])
+          const empty = id !== 'pistol' && !infinite && ammo[id as AmmoWeapon] <= 0
           return `<div class="slot have ${sel === id ? 'sel' : ''} ${empty ? 'empty' : ''}"><b>${w.slot} · ${w.name}</b><small>${a}</small></div>`
         })
       : []
     if (hasGrenade) {
-      slots.push(`<div class="slot have grenade ${grenades <= 0 ? 'empty' : ''}"><b>G · ${GRENADE.name}</b><small>${grenades} / ${GRENADE.max}</small></div>`)
+      slots.push(`<div class="slot have grenade ${grenades <= 0 && !infinite ? 'empty' : ''}"><b>G · ${GRENADE.name}</b><small>${infinite ? '∞' : `${grenades} / ${GRENADE.max}`}</small></div>`)
     }
     $('weapons').innerHTML = slots.join('')
   }

@@ -38,7 +38,9 @@
       </div>
     </div>
     <div id="lego" title="Piezas curiosas de LEGO"><i class="brick"></i><b id="legoN">0</b><span>/</span><span
-        id="legoT">14</span></div>
+        id="legoT">14</span><span id="legoPerks"><i data-n="5" title="5 piezas: más resistencia">+RES</i><i data-n="10"
+          title="10 piezas: correr y dash sin gastar resistencia">SPRINT ∞</i><i data-n="14"
+          title="14 piezas: munición y granadas infinitas">MUNICIÓN ∞</i></span></div>
     <div id="fuel" title="Piedras ignífugas (combustible del cohete)"><i class="gem"></i><b
         id="fuelN">0</b><span>/</span><span id="fuelT">3</span></div>
     <div id="objective"></div>
@@ -124,10 +126,40 @@
       <h1 class="logo">VARADO</h1>
       <div class="menu-btns main">
         <button class="btn primary" id="btn-play" disabled>Cargando…</button>
+        <button class="btn" id="btn-menu-skins">Aspecto</button>
         <button class="btn" id="btn-menu-settings">Configuración</button>
         <button class="btn" id="btn-menu-ach">Logros</button>
       </div>
       <div class="hint" id="load-hint">Preparando el planeta…</div>
+    </div>
+  </div>
+
+  <!-- Aspecto del astronauta -->
+  <div class="ovl menu hidden" id="ovl-skins">
+    <div class="menu-wrap skins-wrap">
+      <h2 class="sub">ASPECTO</h2>
+      <div class="skins-body">
+        <div class="skin-stage">
+          <canvas id="skin-preview"></canvas>
+          <b id="skin-name"></b>
+          <span id="skin-desc"></span>
+        </div>
+        <div id="skin-grid"></div>
+      </div>
+      <button class="btn" id="btn-skins-back">Volver</button>
+    </div>
+  </div>
+
+  <!-- Viñetas de introducción -->
+  <div id="intro" class="hidden">
+    <div class="intro-frame">
+      <canvas id="intro-canvas"></canvas>
+      <p id="intro-caption"></p>
+    </div>
+    <div class="intro-foot">
+      <div id="intro-count"></div>
+      <span id="intro-hint"></span>
+      <button class="btn" id="intro-skip">Saltar ▸▸</button>
     </div>
   </div>
 

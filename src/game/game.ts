@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import {
   ALIENS, ARENA, BY0, BY1, CONFIG, DOOR_H, GRENADE, IMPOSTOR_HP, LEGO_TOTAL, MAX_HP, ROOM_H, SETTINGS, SHIP, SNIPER, STAMINA, WALL_H, WEAPONS, WEAPON_ORDER, WORLD, ZC_END,
-  BOSS_GRENADE_FRAC, FUEL_TOTAL, DIFFICULTIES, type AlienKind, type AmmoWeapon, type WeaponId, type DifficultyId, type DifficultyDef, type Quality
+  BOSS_GRENADE_FRAC, FUEL_TOTAL, DIFFICULTIES, LEGO_PERKS, type AlienKind, type AmmoWeapon, type WeaponId, type DifficultyId, type DifficultyDef, type Quality
 } from './config'
 import { beep, engineSet, engineStop, setMusicMode, sfx } from './audio'
 import { achievements } from './achievements'
@@ -12,6 +12,7 @@ import {
   type ImpostorRig, type PlayerRig, type TurretRig,
 } from './gfx'
 import { SpaceLevel } from './spaceLevel'
+import { selectedSkin, type SkinId } from './skins'
 import { Hud, type RadarDot } from './hud'
 import { Input } from './input'
 import { instance, setBaseGlow } from './models'
@@ -77,7 +78,7 @@ export class Game {
   private projG = new THREE.Group()
 
   // modelos
-  private playerM = makePlayer()
+  private playerM = makePlayer(selectedSkin())
   private buggyM = makeBuggy()
   private impM = makeImpostor()
   private shipM!: THREE.Group
@@ -188,12 +189,33 @@ export class Game {
     this.fx = new Fx(this.dyn)
 
     this.dyn.add(this.playerM, this.buggyM, this.impM)
-    this.playerM.traverse(o => (o.castShadow = true))
+    this.shadowPlayer()
     this.spaceLevel = new SpaceLevel(this.input)
     this.buildEntities()
     this.resize()
     addEventListener('resize', () => this.resize())
   }
+
+  private shadowPlayer(): void {
+    this.playerM.traverse(o => {
+      const mt = (o as THREE.Mesh).material as THREE.Material | undefined
+      o.castShadow = !!mt && !mt.transparent && mt.side !== THREE.BackSide
+    })
+  }
+
+  /** Reconstruye el astronauta con el aspecto elegido en el menú. */
+  applySkin(id: SkinId = selectedSkin()): void {
+    this.dyn.remove(this.playerM)
+    this.playerM = makePlayer(id)
+    this.shadowPlayer()
+    this.dyn.add(this.playerM)
+  }
+
+  // ---------- Beneficios de las piezas LEGO (por partida) ----------
+  get perkStamina(): boolean { return this.stats.lego >= LEGO_PERKS.stamina }
+  get perkFreeRun(): boolean { return this.stats.lego >= LEGO_PERKS.freeRun }
+  get perkInfinite(): boolean { return this.stats.lego >= LEGO_PERKS.infinite }
+  get staminaMax(): number { return STAMINA.max * (this.perkStamina ? LEGO_PERKS.staminaMul : 1) }
 
   setDifficulty(d: DifficultyId): void {
     this.difficulty = d
@@ -910,7 +932,7 @@ export class Game {
     const k = this.input.keys
     const wantRun = (k.has('ShiftLeft') || k.has('ShiftRight') || this.input.touchRun) && hasInput
     p.running = wantRun && !p.exhausted && p.stamina > 0 && p.dashT <= 0
-    if (p.running) {
+    if (p.running && !this.perkFreeRun) {
       p.stamina = Math.max(0, p.stamina - STAMINA.runCost * dt)
       p.staminaIdle = 0
       if (p.stamina <= 0) {
@@ -922,13 +944,14 @@ export class Game {
 
     // dash (C): impulso corto en la dirección de movimiento (o hacia donde miras)
     p.dashCd = Math.max(0, p.dashCd - dt)
-    if (this.input.take('KeyC') && p.dashT <= 0 && p.dashCd <= 0 && p.stamina >= STAMINA.dashCost) {
+    const dashCost = this.perkFreeRun ? 0 : STAMINA.dashCost
+    if (this.input.take('KeyC') && p.dashT <= 0 && p.dashCd <= 0 && p.stamina >= dashCost) {
       const m = Math.hypot(mx, my)
       p.dashX = hasInput ? mx / m : fx
       p.dashY = hasInput ? my / m : fz
       p.dashT = STAMINA.dashTime
       p.dashCd = STAMINA.dashCooldown
-      p.stamina -= STAMINA.dashCost
+      p.stamina -= dashCost
       p.staminaIdle = 0
       sfx.weapon()
       achievements.add('dash')
@@ -982,10 +1005,11 @@ export class Game {
   private updateStamina(dt: number): void {
     const p = this.p
     if (this.buggy.riding) p.running = false
-    if (p.running || p.dashT > 0) return
+    if (this.perkFreeRun) p.exhausted = false
+    else if (p.running || p.dashT > 0) return
     p.staminaIdle += dt
     if (p.staminaIdle < STAMINA.regenDelay) return
-    p.stamina = Math.min(STAMINA.max, p.stamina + STAMINA.regen * dt)
+    p.stamina = Math.min(this.staminaMax, p.stamina + STAMINA.regen * dt)
     if (p.exhausted && p.stamina >= STAMINA.exhaustRecover) p.exhausted = false
   }
 
@@ -1086,7 +1110,7 @@ export class Game {
     if (!p.alive || !this.input.fire) return
     const w = WEAPONS[p.weapon]
     if (!p.owned[w.id] || p.cd > 0) return
-    if (w.id !== 'pistol') {
+    if (w.id !== 'pistol' && !this.perkInfinite) {
       if (p.ammo[w.id] <= 0) {
         p.cd = 0.3
         p.zoomed = false
@@ -1313,13 +1337,14 @@ export class Game {
       this.hud.caption('Aún no tienes granadas de plasma', 1100)
       return
     }
-    if (p.grenades <= 0) {
+    const freeGrenade = this.perkInfinite
+    if (p.grenades <= 0 && !freeGrenade) {
       beep(120, 0.05, { type: 'square', vol: 0.05 })
       this.hud.caption('¡Sin granadas!', 900)
       return
     }
     if (p.grenadeCd > 0) return
-    p.grenades--
+    if (!freeGrenade) p.grenades--
     p.grenadeCd = GRENADE.cooldown
     this.lastFireT = this.t
     const riding = this.buggy.riding
@@ -1641,9 +1666,12 @@ export class Game {
       stand.position.y = -lift
     }
     if (e.t > 0.4) {
-      this.fx.jet(SHIP.x + 70, SHIP.y, lift + 22, 5, 0xffa530, 320, 36, 0.6, 7)
-      this.fx.jet(SHIP.x + 70, SHIP.y, lift + 22, 3, 0xfff2b0, 360, 20, 0.4, 5)
-      this.fx.jet(SHIP.x + 70, SHIP.y, 4, 2, 0xd8c79a, 80, 120, 0.9, 8)
+      // el chorro sale de la tobera central del cohete (y de las dos laterales), no de la torre
+      const jx = this.shipM.position.x
+      this.fx.jet(jx, SHIP.y, lift + 8, 5, 0xffa530, 320, 30, 0.6, 7)
+      this.fx.jet(jx, SHIP.y, lift + 8, 3, 0xfff2b0, 360, 16, 0.4, 5)
+      for (const sx of [-22, 22]) this.fx.jet(jx + sx, SHIP.y, lift + 6, 1, 0x8fe3ff, 300, 12, 0.35, 4)
+      this.fx.jet(jx, SHIP.y, 4, 2, 0xd8c79a, 80, 120, 0.9, 8)
     }
     this.shake = e.t > 0.4 && e.t < 3 ? 4 : 0
     if (e.t > 3.3 && !e.fade) {
@@ -1975,6 +2003,28 @@ export class Game {
     }
   }
 
+  /** Anuncia y aplica el beneficio que se desbloquea al llegar a 5, 10 y 14 piezas. */
+  private grantLegoPerk(): void {
+    const n = this.stats.lego
+    const p = this.p
+    if (n === LEGO_PERKS.stamina) {
+      p.stamina = this.staminaMax
+      p.exhausted = false
+      this.hud.perk('¡BENEFICIO LEGO!', 'Más resistencia: tu barra de estamina crece un 50%.')
+      this.say('Estas piezas... me siento con más aguante. Puedo correr mucho más.', 0.8)
+    } else if (n === LEGO_PERKS.freeRun) {
+      p.stamina = this.staminaMax
+      p.exhausted = false
+      this.hud.perk('¡BENEFICIO LEGO!', 'Correr y hacer dash ya no consumen resistencia.')
+      this.say('¡No me canso! Puedo correr y esquivar sin parar.', 0.8)
+    } else if (n === LEGO_PERKS.infinite) {
+      p.hasGrenade = true
+      p.grenades = GRENADE.max
+      this.hud.perk('¡COLECCIÓN COMPLETA!', 'Munición y granadas de plasma infinitas.')
+      this.say('¡Colección completa de piezas LEGO! Munición y granadas sin límite... que tiemblen.', 0.8)
+    }
+  }
+
   private updateLegos(dt: number): void {
     const p = this.p
     for (const l of this.legos) {
@@ -1988,7 +2038,7 @@ export class Game {
         this.hud.caption(`¡Pieza curiosa de LEGO!  ${this.stats.lego}/${LEGO_TOTAL}`, 1800)
         sfx.lego()
         this.fx.burst(l.x, l.y, 26, 0xffe98a, 220, 0.8, 3.5, 20)
-        if (this.stats.lego === LEGO_TOTAL) this.say('¡Colección completa de piezas LEGO! Eres un explorador legendario.', 0.6)
+        this.grantLegoPerk()
       } else if (d < 380) {
         l.spark -= dt
         if (l.spark <= 0) {
@@ -3235,8 +3285,8 @@ export class Game {
       this.hud.setHp(p.hp, MAX_HP)
       this.hud.hurt(this.hurtFx * 0.8)
       const anyGun = p.owned.pistol || p.owned.rifle || p.owned.shotgun || p.owned.sniper
-      this.hud.setWeapons(p.owned, p.ammo, p.weapon, anyGun, p.hasGrenade, p.grenades)
-      this.hud.setStamina(p.stamina, STAMINA.max, p.exhausted)
+      this.hud.setWeapons(p.owned, p.ammo, p.weapon, anyGun, p.hasGrenade, p.grenades, this.perkInfinite)
+      this.hud.setStamina(p.stamina, this.staminaMax, p.exhausted, this.perkStamina, this.perkFreeRun)
       const boss = this.enemies.find(e => e.kind === 'boss' && e.state === 'chase')
       if (this.mode === 'play' && boss) this.hud.boss('Jefe Impostor', boss.hp / boss.maxHp)
       else if (this.mode === 'play' && im.state === 'chase') this.hud.boss('Impostor', im.hp / IMPOSTOR_HP)

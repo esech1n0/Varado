@@ -1841,3 +1841,339 @@ kbd {
   border-radius: 6px;
   pointer-events: none;
 }
+
+/* ---------- Beneficios de las piezas LEGO ---------- */
+#legoPerks {
+  display: inline-flex;
+  gap: 5px;
+  margin-left: 4px;
+}
+
+#legoPerks i {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 2px 6px 1px;
+  border-radius: 5px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.4);
+  text-shadow: none;
+  white-space: nowrap;
+}
+
+#legoPerks i.on {
+  color: var(--ink);
+  background: var(--yellow);
+  border-color: var(--ink);
+  box-shadow: 0 0 10px rgba(255, 210, 31, 0.8);
+}
+
+#stam.boost {
+  width: min(430px, 60vw);
+}
+
+#stam.boost .bar {
+  border-color: var(--yellow);
+}
+
+#stfill.free {
+  background: linear-gradient(#8ff6ff, #2fb5ff);
+}
+
+#toast.perk {
+  border-color: var(--yellow);
+}
+
+#toast.perk .toast-head {
+  color: var(--yellow);
+}
+
+#toast.perk #toastTitle {
+  color: #fff;
+}
+
+/* ---------- Menú Aspecto ---------- */
+.menu-wrap.skins-wrap {
+  width: min(980px, 96vw);
+  gap: clamp(12px, 2.4vh, 22px);
+}
+
+.skins-body {
+  display: flex;
+  gap: 22px;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+}
+
+.skin-stage {
+  flex: 0 0 auto;
+  width: min(300px, 38vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: radial-gradient(ellipse at 50% 40%, rgba(87, 242, 255, 0.2), rgba(8, 12, 32, 0.78) 70%);
+  border: 4px solid var(--ink);
+  outline: 2px solid var(--cyan);
+  border-radius: 14px;
+  padding: 10px 10px 14px;
+}
+
+#skin-preview {
+  width: 100%;
+  height: min(360px, 46vh);
+  display: block;
+}
+
+#skin-name {
+  font-size: 24px;
+  color: var(--yellow);
+  text-shadow: 2px 2px 0 var(--ink);
+  font-weight: 400;
+}
+
+#skin-desc {
+  font-size: 13px;
+  line-height: 1.35;
+  color: #e6f0ff;
+  min-height: 36px;
+}
+
+#skin-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-content: center;
+}
+
+.skin-card {
+  position: relative;
+  cursor: pointer;
+  background: rgba(255, 247, 214, 0.94);
+  color: var(--ink);
+  border: 4px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 5px 5px 0 var(--ink);
+  padding: 6px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: transform 0.08s, box-shadow 0.08s;
+  font-family: 'Audiowide', sans-serif;
+}
+
+.skin-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 var(--ink);
+}
+
+.skin-card img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+  background: radial-gradient(ellipse at 50% 45%, #33416e, #0e1330 75%);
+  border-radius: 8px;
+  border: 2px solid var(--ink);
+}
+
+.skin-card b {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.skin-card small {
+  font-size: 10px;
+  line-height: 1.25;
+  min-height: 25px;
+  opacity: 0.85;
+}
+
+.skin-card.sel {
+  background: var(--yellow);
+  outline: 3px solid var(--cyan);
+}
+
+.skin-card.sel::after {
+  content: 'EN USO';
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  background: var(--green);
+  color: var(--ink);
+  border: 3px solid var(--ink);
+  border-radius: 7px;
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.skin-card.locked {
+  background: rgba(60, 62, 84, 0.94);
+  color: #cfd4e6;
+}
+
+.skin-card.locked img {
+  filter: brightness(0.22) saturate(0.4);
+}
+
+.skin-card.locked::before {
+  content: '🔒';
+  position: absolute;
+  top: 28%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 34px;
+  z-index: 1;
+}
+
+.skin-card.shake {
+  animation: skinShake 0.3s;
+}
+
+@keyframes skinShake {
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+/* ---------- Viñetas de introducción ---------- */
+#intro {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px;
+  background: radial-gradient(ellipse at center, #141a3c, #04061a 80%);
+  cursor: pointer;
+  transition: opacity 0.4s;
+  touch-action: manipulation;
+}
+
+#intro.out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.intro-frame {
+  position: relative;
+  width: min(96vw, calc((100vh - 110px) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  background: #05081a;
+  border: 6px solid #fff7d6;
+  outline: 5px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: 12px 12px 0 rgba(0, 0, 0, 0.55);
+  transform: rotate(-0.4deg);
+  overflow: hidden;
+}
+
+#intro-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#intro-caption {
+  position: absolute;
+  left: 2.2%;
+  bottom: 3.5%;
+  max-width: 62%;
+  margin: 0;
+  background: #ffe98a;
+  color: var(--ink);
+  border: 4px solid var(--ink);
+  box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.6);
+  padding: 8px 14px;
+  font-family: 'Barlow Semi Condensed', 'Audiowide', sans-serif;
+  font-weight: 600;
+  font-size: clamp(13px, 1.75vw, 23px);
+  line-height: 1.25;
+  text-align: left;
+  opacity: 0;
+}
+
+#intro-caption.in {
+  animation: introCaption 0.5s 0.25s ease-out forwards;
+}
+
+@keyframes introCaption {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.intro-foot {
+  width: min(96vw, calc((100vh - 110px) * 16 / 9));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#intro-count {
+  display: flex;
+  gap: 7px;
+}
+
+#intro-count i {
+  width: 26px;
+  height: 9px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid var(--ink);
+}
+
+#intro-count i.done {
+  background: rgba(255, 210, 31, 0.55);
+}
+
+#intro-count i.on {
+  background: var(--yellow);
+  box-shadow: 0 0 10px var(--yellow);
+}
+
+#intro-hint {
+  font-size: 13px;
+  color: #cfe0ff;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+#intro-hint.on {
+  opacity: 0.85;
+  animation: pulse 0.9s infinite alternate;
+}
+
+#intro-skip {
+  font-size: 15px;
+  padding: 5px 14px 4px;
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .skins-body {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  #skin-preview {
+    height: 200px;
+  }
+
+  #skin-grid {
+    width: 100%;
+  }
+
+  #legoPerks i {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
+
+  #intro-caption {
+    max-width: 92%;
+  }
+}

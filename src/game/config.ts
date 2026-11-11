@@ -223,4 +223,14 @@ export const ALIENS: Record<AlienKind, AlienDef> = {
 
 export const IMPOSTOR_HP = 200
 export const LEGO_TOTAL = 14
+/** Beneficios por piezas LEGO recogidas en la partida. */
+export const LEGO_PERKS = {
+  /** Más resistencia (estamina máxima multiplicada). */
+  stamina: 5,
+  staminaMul: 1.5,
+  /** Correr y hacer dash no consumen resistencia. */
+  freeRun: 10,
+  /** Munición y granadas infinitas. */
+  infinite: 14,
+}
 export const FORM_URL = 'https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit'

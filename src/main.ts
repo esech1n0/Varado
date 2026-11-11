@@ -6,6 +6,9 @@ import { Game } from './game/game'
 import { Hud } from './game/hud'
 import { Input } from './game/input'
 import { loadModels } from './game/models'
+import { Intro } from './game/intro'
+import { SkinPreview } from './game/skinPreview'
+import { SKINS, selectSkin, selectedSkin, skinDef, skinUnlocked, type SkinId } from './game/skins'
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T
 
@@ -322,11 +325,73 @@ document.querySelectorAll<HTMLButtonElement>('.diff-btn').forEach(btn => {
     hud.overlay('diff', false)
     hud.overlay('start', false)
     showMenuBackground(false)
-    started = true
-    setMusicMode('play')
-    game.start()
-    input.requestLock()
+    // Las viñetas cuentan cómo llegaron hasta aquí; al terminar, el astronauta "despierta".
+    const sk = skinDef(selectedSkin())
+    const css = (n: number): string => '#' + n.toString(16).padStart(6, '0')
+    intro.play({ suit: css(sk.suit), accent: css(sk.accent), helmet: css(sk.helmet) }, () => {
+      started = true
+      setMusicMode('play')
+      game.start()
+      input.requestLock()
+    })
   })
+})
+
+// ==========================================
+// Aspecto: selección de skin del astronauta
+// ==========================================
+const intro = new Intro()
+if (import.meta.env.DEV) (window as any).__INTRO__ = intro
+let skinPreview: SkinPreview | null = null
+let skinThumbs: Record<string, string> = {}
+let skinFocus: SkinId = selectedSkin()
+
+function renderSkins(): void {
+  const current = selectedSkin()
+  const focus = skinDef(skinFocus)
+  $('skin-name').textContent = focus.name
+  $('skin-desc').textContent = skinUnlocked(focus.id) ? focus.desc : `Bloqueado · ${focus.unlockText}`
+  $('skin-grid').innerHTML = SKINS.map(s => {
+    const open = skinUnlocked(s.id)
+    const cls = ['skin-card', open ? '' : 'locked', s.id === current ? 'sel' : ''].join(' ')
+    const sub = open ? (s.unlock ? 'Desbloqueado' : 'Disponible') : s.unlockText
+    return `<button type="button" class="${cls}" data-skin="${s.id}"><img src="${skinThumbs[s.id] ?? ''}" alt="${s.name}" /><b>${s.name}</b><small>${sub}</small></button>`
+  }).join('')
+}
+
+$('skin-grid').addEventListener('click', e => {
+  const card = (e.target as HTMLElement).closest<HTMLElement>('.skin-card')
+  if (!card) return
+  const id = card.dataset.skin as SkinId
+  skinFocus = id
+  if (selectSkin(id)) {
+    game.applySkin(id)
+    skinPreview?.show(id)
+    renderSkins()
+  } else {
+    // bloqueado: sólo se muestra el requisito
+    renderSkins()
+    const again = document.querySelector<HTMLElement>(`.skin-card[data-skin="${id}"]`)
+    again?.classList.add('shake')
+  }
+})
+
+$('btn-menu-skins').addEventListener('click', () => {
+  audioInit()
+  hud.overlay('start', false)
+  hud.overlay('skins', true)
+  skinFocus = selectedSkin()
+  skinPreview ??= new SkinPreview($('skin-preview') as HTMLCanvasElement)
+  if (!Object.keys(skinThumbs).length) skinThumbs = skinPreview.thumbnails()
+  skinPreview.show(skinFocus)
+  skinPreview.start()
+  renderSkins()
+})
+
+$('btn-skins-back').addEventListener('click', () => {
+  skinPreview?.stop()
+  hud.overlay('skins', false)
+  hud.overlay('start', true)
 })
 
 // Configuración desde el menú principal
@@ -372,6 +437,8 @@ $('btn-ach-reset').addEventListener('click', () => {
   if (window.confirm('¿Deseas reiniciar el progreso de todos tus logros?')) {
     achievements.reset()
     hud.renderAchievements()
+    // los aspectos de logro vuelven a bloquearse
+    game.applySkin()
   }
 })
 
