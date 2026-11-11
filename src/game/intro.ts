@@ -792,6 +792,135 @@ const PANELS: Panel[] = [
   },
 ]
 
+// ---------- Llegada a Bershna (dos viñetas, tras el nivel del cohete) ----------
+function paleMoon(g: G, x: number, y: number, rad: number): void {
+  circle(g, x, y, rad, '#e2dbd4', 0)
+  const q = seeded(77)
+  for (let i = 0; i < 16; i++) {
+    const a = q() * TAU
+    const d = q() * rad * 0.82
+    g.fillStyle = `rgba(120,118,128,${0.14 + q() * 0.2})`
+    g.beginPath()
+    g.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, rad * (0.04 + q() * 0.1), 0, TAU)
+    g.fill()
+  }
+}
+
+const BERSHNA_PANELS: Panel[] = [
+  {
+    text: 'El cinturón de meteoritos queda atrás. Ante el cohete aparece Bershna: un mundo rojo y silencioso, con una luna enorme vigilando su cielo.',
+    dur: 7.5,
+    cue: [[0.2, () => sfx.launch()]],
+    draw(g, t) {
+      g.fillStyle = '#04051a'
+      g.fillRect(0, 0, W, H)
+      const neb = g.createRadialGradient(400, 250, 20, 400, 250, 900)
+      neb.addColorStop(0, 'rgba(110,40,70,.45)')
+      neb.addColorStop(1, 'rgba(4,5,26,0)')
+      g.fillStyle = neb
+      g.fillRect(0, 0, W, H)
+      stars(g, t, H, t * 5)
+      paleMoon(g, 1330 - t * 5, 210, 130)
+      const px = 1060 - t * 11
+      const py = 700 - t * 4
+      const pr = 400 + t * 15
+      dust(g, px, py, pr * 1.28, 0.3, '255,110,80')
+      g.save()
+      g.beginPath()
+      g.arc(px, py, pr, 0, TAU)
+      g.clip()
+      const pg = g.createRadialGradient(px - pr * 0.45, py - pr * 0.5, pr * 0.1, px, py, pr * 1.05)
+      pg.addColorStop(0, '#ffb894')
+      pg.addColorStop(0.35, '#d8553a')
+      pg.addColorStop(0.7, '#8a2a1c')
+      pg.addColorStop(1, '#1c0604')
+      g.fillStyle = pg
+      g.fillRect(px - pr, py - pr, pr * 2, pr * 2)
+      const r = seeded(53)
+      g.lineCap = 'round'
+      for (let i = 0; i < 8; i++) {
+        g.strokeStyle = `rgba(${i % 2 ? '90,20,12' : '255,190,160'},${0.14 + r() * 0.12})`
+        g.lineWidth = pr * (0.03 + r() * 0.05)
+        const yy = py - pr + (i + 0.6) * (pr * 2) / 8
+        g.beginPath()
+        g.moveTo(px - pr, yy + 20)
+        g.bezierCurveTo(px - pr * 0.4, yy - 50 * r(), px + pr * 0.3, yy + 50 * r(), px + pr, yy - 20)
+        g.stroke()
+      }
+      g.restore()
+      const k = easeOut(t / 7)
+      rocket(g, lerp(-160, 720, k), lerp(170, 470, k), lerp(0.95, 0.42, k), Math.atan2(300, 880) + Math.PI / 2, t, 190)
+    },
+  },
+  {
+    text: 'El cohete se posa sobre su soporte, dentro de un perímetro amurallado. A lo lejos, cúpulas abandonadas. Ni una sola luz encendida.',
+    dur: 7.4,
+    cue: [[0.1, () => sfx.launch()], [4.7, () => sfx.slam()]],
+    draw(g, t) {
+      const hz = 560
+      duskSky(g, hz, t)
+      paleMoon(g, 800, 300, 250)
+      dunes(g, hz, 0)
+      g.fillStyle = 'rgba(170,30,24,.22)'
+      g.fillRect(0, hz - 30, W, H)
+      // viviendas-cúpula abandonadas al fondo
+      for (const [x, rad] of [[410, 84], [540, 56], [1120, 100], [1250, 66]]) {
+        g.beginPath()
+        g.arc(x, hz + 64, rad, Math.PI, 0)
+        g.closePath()
+        g.fillStyle = '#d9987a'
+        g.fill()
+        g.lineWidth = 5
+        g.strokeStyle = INK
+        g.stroke()
+        g.beginPath()
+        g.arc(x, hz + 64, rad * 0.66, Math.PI, 0)
+        g.closePath()
+        g.fillStyle = '#2c2230'
+        g.fill()
+        g.stroke()
+      }
+      const wall = (x: number, w: number, top: number): void => {
+        rrect(g, x, top, w, hz + 110 - top, 0, '#5a2a26')
+        g.fillStyle = 'rgba(15,6,10,.3)'
+        for (let yy = top + 46; yy < hz + 100; yy += 46) g.fillRect(x, yy, w, 5)
+        for (let xx = x + 14; xx < x + w - 30; xx += 60) rrect(g, xx, top - 20, 34, 20, 0, '#7a3a30', INK, 4)
+      }
+      wall(-10, 300, 390)
+      wall(1310, 300, 420)
+      g.fillStyle = '#3a2422'
+      g.beginPath()
+      g.ellipse(760, 742, 260, 44, 0, 0, TAU)
+      g.fill()
+      g.lineWidth = 8
+      g.strokeStyle = '#ffc61a'
+      g.stroke()
+      // soporte: torre de celosía con dos brazos
+      for (const x of [890, 940]) rrect(g, x, 400, 12, 340, 0, '#ffc61a', INK, 4)
+      for (let y = 420; y < 720; y += 60) rrect(g, 884, y, 74, 10, 0, '#22262f', INK, 3)
+      const k = easeOut(t / 4.6)
+      const ry = lerp(-140, 736, k)
+      const landed = t > 4.6
+      const near = clamp01(1 - (736 - ry) / 420)
+      rocket(g, 760 + (landed ? 0 : Math.sin(t * 70) * 3), ry, 0.95, 0, t, landed ? Math.max(0, 80 - (t - 4.6) * 200) : lerp(300, 150, k))
+      if (landed) for (const y of [520, 620]) rrect(g, 800, y, 96, 12, 0, '#22262f', INK, 3)
+      const settle = landed ? clamp01(1 - (t - 4.6) / 2) : 1
+      for (let i = 0; i < 7; i++) {
+        const grow = 60 + i * 74 + Math.sin(t * 3 + i) * 14
+        for (const sd of [-1, 1]) dust(g, 760 + sd * grow * near, 748 - i * 6, (70 + i * 22) * near, 0.5 * near * settle, '230,120,90')
+      }
+      // la escena se funde a negro antes de empezar el nivel
+      const dark = clamp01((t - 5.7) / 1.2)
+      if (dark > 0) {
+        g.fillStyle = `rgba(0,0,0,${dark})`
+        g.fillRect(0, 0, W, H)
+      }
+    },
+  },
+]
+
+export type IntroSet = 'start' | 'bershna'
+
 export class Intro {
   private g: G
   private raf = 0
@@ -799,6 +928,9 @@ export class Intro {
   private t0 = 0
   private last = 0
   private active = false
+  private panels: Panel[] = PANELS
+  /** Las viñetas de llegada terminan solas (acaban fundidas a negro). */
+  private auto = false
   private ctx: Ctx = { a: { suit: '#f2f2ee', accent: '#d9342b', helmet: '#fff' }, b: { suit: '#f2c21a', accent: '#1b1d24', helmet: '#f4f4f0' } }
   private onDone: () => void = () => {}
   private readonly root: HTMLElement
@@ -832,7 +964,8 @@ export class Intro {
   }
 
   /** Dibuja un instante concreto de una viñeta (para revisarlas en desarrollo). */
-  still(i: number, t: number): void {
+  still(i: number, t: number, set: IntroSet = 'start'): void {
+    const PANELS = set === 'bershna' ? BERSHNA_PANELS : this.panels
     this.root.classList.remove('hidden', 'out')
     this.caption.textContent = PANELS[i].text
     this.caption.classList.add('in')
@@ -847,7 +980,9 @@ export class Intro {
   }
 
   /** `player` son los colores del aspecto elegido; el compañero viste de otro color. */
-  play(player: IntroColors, onDone: () => void): void {
+  play(player: IntroColors, onDone: () => void, set: IntroSet = 'start'): void {
+    this.panels = set === 'bershna' ? BERSHNA_PANELS : PANELS
+    this.auto = set === 'bershna'
     const mate: IntroColors = player.suit.toLowerCase() === '#f2c21a' ? { suit: '#f2f2ee', accent: '#d9342b', helmet: '#fff' } : { suit: '#f2c21a', accent: '#1b1d24', helmet: '#f4f4f0' }
     this.ctx = { a: player, b: mate }
     this.onDone = onDone
@@ -862,19 +997,20 @@ export class Intro {
     this.idx = i
     this.t0 = performance.now()
     this.last = 0
+    const PANELS = this.panels
     this.caption.textContent = PANELS[i].text
     this.caption.classList.remove('in')
     void this.caption.offsetWidth
     this.caption.classList.add('in')
     this.count.innerHTML = PANELS.map((_, k) => `<i class="${k === i ? 'on' : k < i ? 'done' : ''}"></i>`).join('')
-    this.hint.textContent = i === PANELS.length - 1 ? 'Clic o Espacio para despertar' : 'Clic o Espacio para continuar'
+    this.hint.textContent = i === PANELS.length - 1 && !this.auto ? 'Clic o Espacio para despertar' : 'Clic o Espacio para continuar'
     this.hint.classList.remove('on')
   }
 
   private next(): void {
     if (!this.active) return
     if (performance.now() - this.t0 < 350) return // evita saltos dobles por el clic que abrió la intro
-    if (this.idx >= PANELS.length - 1) this.finish()
+    if (this.idx >= this.panels.length - 1) this.finish()
     else this.show(this.idx + 1)
   }
 
@@ -891,6 +1027,7 @@ export class Intro {
 
   private tick = (now: number): void => {
     if (!this.active) return
+    const PANELS = this.panels
     const p = PANELS[this.idx]
     const t = (now - this.t0) / 1000
     for (const [at, fn] of p.cue ?? []) {
@@ -913,6 +1050,10 @@ export class Intro {
     }
     if (t > 2.2) this.hint.classList.add('on')
     if (!last && t >= p.dur) this.show(this.idx + 1)
+    else if (last && this.auto && t >= p.dur) {
+      this.finish()
+      return
+    }
     this.raf = requestAnimationFrame(this.tick)
   }
 }

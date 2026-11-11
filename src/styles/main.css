@@ -2177,3 +2177,264 @@ kbd {
     max-width: 92%;
   }
 }
+
+/* ---------- Encuesta de evaluación integrada ---------- */
+#ovl-survey {
+  z-index: 40;
+}
+
+.panel.survey {
+  width: min(760px, 100%);
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 20px 16px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.sv-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sv-step {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--red);
+}
+
+.sv-x {
+  cursor: pointer;
+  background: none;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+  color: var(--ink);
+  position: relative;
+  z-index: 1;
+}
+
+.sv-x:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+.sv-bar {
+  height: 10px;
+  background: var(--ink);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 6px 0 8px;
+}
+
+.sv-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #5ef28d, #26b857);
+  transition: width 0.25s;
+}
+
+.panel.survey h3 {
+  margin: 0 0 4px;
+  font-weight: 400;
+  font-size: clamp(19px, 3.4vw, 27px);
+  color: var(--ink);
+}
+
+.sv-note {
+  margin: 0 0 6px;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.sv-warn {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--red);
+}
+
+.sv-list {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 4px 6px;
+  margin-bottom: 8px;
+  text-align: left;
+  touch-action: pan-y;
+}
+
+.sv-q {
+  background: rgba(27, 24, 56, 0.08);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  padding: 7px 12px 9px;
+}
+
+.sv-q.miss {
+  border-color: var(--red);
+  background: rgba(229, 56, 75, 0.14);
+}
+
+.sv-q p {
+  margin: 0 0 6px;
+  font-family: 'Barlow Semi Condensed', 'Audiowide', sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.sv-scale {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.sv-scale span {
+  flex: 1 1 0;
+  opacity: 0.8;
+}
+
+.sv-scale span:first-child {
+  text-align: right;
+}
+
+.sv-nums {
+  display: flex;
+  gap: 6px;
+}
+
+.sv-num,
+.sv-opt {
+  cursor: pointer;
+  background: #fff;
+  color: var(--ink);
+  border: 3px solid var(--ink);
+  border-radius: 9px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-size: 13px;
+  padding: 5px 12px 4px;
+  transition: transform 0.06s;
+}
+
+.sv-num {
+  width: 42px;
+  height: 38px;
+  padding: 0;
+  font-size: 17px;
+}
+
+.sv-num:hover,
+.sv-opt:hover {
+  transform: translate(-1px, -1px);
+}
+
+.sv-num.on,
+.sv-opt.on {
+  background: var(--yellow);
+  box-shadow: 2px 2px 0 var(--ink), 0 0 0 2px var(--cyan);
+}
+
+.sv-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.sv-text {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 3px solid var(--ink);
+  border-radius: 9px;
+  padding: 6px 9px;
+  font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
+  font-size: 16px;
+  color: var(--ink);
+  background: #fff;
+  user-select: text;
+  -webkit-user-select: text;
+  touch-action: auto;
+}
+
+@media (max-width: 520px) {
+  .sv-scale {
+    flex-wrap: wrap;
+  }
+
+  .sv-scale span {
+    flex: 1 1 40%;
+  }
+
+  .sv-nums {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sv-scale span:first-child {
+    text-align: left;
+  }
+
+  .sv-scale span:last-child {
+    text-align: right;
+  }
+}
+
+/* ---------- Bershna: apertura circular desde negro y voces por radio ---------- */
+#iris {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background: #000;
+}
+
+#radio.remote {
+  border-color: var(--orange);
+}
+
+#radio.remote .tag {
+  background: var(--orange);
+}
+
+#radio.remote #radioText {
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
+
+/* ---------- Mejoras de vehículo conseguidas ---------- */
+#upgrades {
+  left: 16px;
+  top: 152px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--cyan);
+  text-shadow: 1px 1px 0 var(--ink);
+}
+
+#upgrades:empty {
+  display: none;
+}
+
+#upgrades i {
+  font-style: normal;
+  font-size: 10px;
+  padding: 2px 6px 1px;
+  border-radius: 5px;
+  background: var(--cyan);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  text-shadow: none;
+  box-shadow: 0 0 8px rgba(87, 242, 255, 0.7);
+}

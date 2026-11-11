@@ -1,12 +1,13 @@
 import './styles/main.css'
 import { audioInit, engineSet, engineStop, setMusicMode, setVolume, type VolumeKey } from './game/audio'
-import { FORM_URL, SETTINGS, saveSettings, type DifficultyId, type Quality } from './game/config'
+import { DIFFICULTIES, SETTINGS, saveSettings, type DifficultyId, type Quality } from './game/config'
 import { achievements } from './game/achievements'
 import { Game } from './game/game'
 import { Hud } from './game/hud'
 import { Input } from './game/input'
 import { loadModels } from './game/models'
 import { Intro } from './game/intro'
+import { Survey } from './game/survey'
 import { SkinPreview } from './game/skinPreview'
 import { SKINS, selectSkin, selectedSkin, skinDef, skinUnlocked, type SkinId } from './game/skins'
 
@@ -278,7 +279,8 @@ input.onLockChange = locked => {
 }
 
 addEventListener('keydown', e => {
-  const isInput = (e.target as HTMLElement | null)?.tagName === 'INPUT'
+  const tag = (e.target as HTMLElement | null)?.tagName
+  const isInput = tag === 'INPUT' || tag === 'TEXTAREA'
   if (e.code === 'Escape' && started && (game.mode === 'play' || game.mode === 'space')) {
     if (isInput) (e.target as HTMLElement).blur()
     if (inSettings) {
@@ -341,6 +343,18 @@ document.querySelectorAll<HTMLButtonElement>('.diff-btn').forEach(btn => {
 // Aspecto: selección de skin del astronauta
 // ==========================================
 const intro = new Intro()
+const introColors = (): { suit: string; accent: string; helmet: string } => {
+  const sk = skinDef(selectedSkin())
+  const css = (n: number): string => '#' + n.toString(16).padStart(6, '0')
+  return { suit: css(sk.suit), accent: css(sk.accent), helmet: css(sk.helmet) }
+}
+// Al terminar el nivel del cohete: viñetas de llegada y comienza el planeta Bershna
+game.onArrive = () => {
+  intro.play(introColors(), () => {
+    game.startBershna()
+    input.requestLock()
+  }, 'bershna')
+}
 if (import.meta.env.DEV) (window as any).__INTRO__ = intro
 let skinPreview: SkinPreview | null = null
 let skinThumbs: Record<string, string> = {}
@@ -464,12 +478,37 @@ $('btn-restart').addEventListener('click', () => {
   inSettings = false
   hud.overlay('pause', false)
   hud.overlay('settings', false)
-  game.start()
+  if (game.level === 2) game.startBershna()
+  else game.start()
   input.requestLock()
 })
 
+// ==========================================
+// Encuesta de evaluación integrada
+// ==========================================
+const survey = new Survey()
+/** Datos de la partida que acompañan a las respuestas. */
+function surveyContext(): Record<string, string | number> {
+  const t = Math.floor(game.runTime)
+  return {
+    Dificultad: DIFFICULTIES[game.difficulty].name,
+    'Tiempo de la última partida': `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`,
+    'Aliens derrotados': game.stats.kills,
+    Caídas: game.stats.deaths,
+    'Piezas LEGO': game.stats.lego,
+    Aspecto: skinDef(selectedSkin()).name,
+  }
+}
+function openSurvey(context = surveyContext()): void {
+  input.exitLock()
+  survey.open(context, () => {})
+}
+$('btn-menu-eval').addEventListener('click', () => openSurvey())
+$('eval-dead').addEventListener('click', () => openSurvey())
+$('eval-end').addEventListener('click', () => openSurvey())
+
 $('btn-quit-eval').addEventListener('click', () => {
-  window.open(FORM_URL, '_blank', 'noopener,noreferrer')
+  const context = surveyContext() // antes de reiniciar la partida
   engineStop()
   game.paused = false
   inSettings = false
@@ -481,6 +520,7 @@ $('btn-quit-eval').addEventListener('click', () => {
   showMenuBackground(true)
   hud.overlay('start', true)
   input.exitLock()
+  openSurvey(context)
 })
 
 $('btn-retry').addEventListener('click', () => {

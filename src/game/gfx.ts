@@ -1152,3 +1152,130 @@ export function makeLever(): LeverRig {
   return { group, arm, lamp }
 }
 
+
+// ---------- Vehículos de Bershna ----------
+/** Buggy de metal oscuro con una ametralladora giratoria en la parte trasera. */
+export function makeGunBuggy(): THREE.Group {
+  const g = new THREE.Group()
+  const dk = 0x2a2e36
+  const steel = { metalness: 0.55, roughness: 0.42 }
+  const part = (w: number, h: number, d: number, color: number, x: number, y: number, z: number): THREE.Mesh => {
+    const m = box(w, h, d, color, x, y, z)
+    m.material = mat(color, steel)
+    g.add(m)
+    return m
+  }
+  part(72, 9, 34, dk, 0, 14, 0)
+  part(26, 8, 30, 0x353a44, 28, 19, 0)
+  part(8, 5, 32, 0x1b1e24, -35, 19, 0)
+  part(14, 14, 22, 0x1b1e24, -6, 24, 0)
+  part(30, 3, 38, 0xb8451f, 0, 8.5, 0)
+  part(4, 10, 36, 0x3f4551, 39, 17, 0) // defensa delantera
+  const post = cyl(1.5, 1.5, 14, 0x15161a, 6)
+  post.position.set(10, 26, 0)
+  post.rotation.z = 0.6
+  g.add(post)
+  const sw = new THREE.Mesh(new THREE.TorusGeometry(6, 1.4, 6, 14), mat(0x15161a))
+  sw.position.set(13, 32, 0)
+  sw.rotation.y = Math.PI / 2
+  sw.rotation.x = 0.6
+  g.add(sw)
+  for (const s of [-1, 1]) {
+    const hl = new THREE.Mesh(boxGeo, basic(0xff7a22))
+    hl.scale.set(4, 5, 7)
+    hl.position.set(42.5, 20, s * 10)
+    g.add(hl)
+  }
+  // torreta trasera
+  const turret = new THREE.Group()
+  turret.position.set(-24, 24, 0)
+  const ring = cyl(8, 9, 5, 0x3f4551, 12, steel)
+  ring.position.y = 2
+  const mount = cyl(2.4, 2.4, 16, 0x15161a, 8)
+  mount.position.y = 12
+  const body = box(16, 8, 9, 0x1b1e24, 2, 22, 0)
+  body.material = mat(0x1b1e24, steel)
+  const shield = box(2, 16, 22, 0x3f4551, 9, 24, 0)
+  shield.material = mat(0x3f4551, steel)
+  turret.add(ring, mount, body, shield)
+  for (const s of [-1, 1]) {
+    const barrel = cyl(1.5, 1.5, 30, 0x0f1014, 8, steel)
+    barrel.rotation.z = Math.PI / 2
+    barrel.position.set(24, 22, s * 2.4)
+    turret.add(barrel)
+  }
+  const tipGlow = new THREE.Mesh(boxGeo, basic(0x8fe3ff))
+  tipGlow.scale.set(3, 3, 8)
+  tipGlow.position.set(39, 22, 0)
+  const ammoBox = box(8, 9, 7, 0x4b5a2a, -2, 21, 9)
+  turret.add(tipGlow, ammoBox)
+  g.add(turret)
+  const wheels: THREE.Group[] = []
+  for (const x of [-25, 26]) {
+    for (const s of [-1, 1]) {
+      const wg = new THREE.Group()
+      wg.position.set(x, 11, s * 22)
+      const tire = cyl(11.5, 11.5, 10, 0x0f1014, 16)
+      tire.rotation.x = Math.PI / 2
+      wg.add(tire)
+      const hub = cyl(5, 5, 11, 0x5d6472, 8, steel)
+      hub.rotation.x = Math.PI / 2
+      wg.add(hub)
+      g.add(wg)
+      wheels.push(wg)
+    }
+  }
+  g.userData = { wheels, turret }
+  return g
+}
+
+/** Moto del desierto: dos ruedas anchas con tacos para la arena, ligera y más rápida que los buggys. */
+export function makeMoto(): THREE.Group {
+  const g = new THREE.Group()
+  const red = 0xd9482b
+  const dk = 0x1b1e24
+  g.add(box(34, 7, 9, red, 0, 19, 0))
+  g.add(box(16, 5, 11, dk, -8, 24.5, 0)) // asiento
+  g.add(box(14, 9, 8, 0x5d6472, 4, 12, 0)) // motor
+  g.add(box(12, 6, 7, red, 15, 23, 0)) // depósito
+  const fork = cyl(1.6, 1.6, 22, 0x9aa1ad, 6)
+  fork.position.set(22, 20, 0)
+  fork.rotation.z = -0.5
+  g.add(fork)
+  const bar = cyl(1.2, 1.2, 22, dk, 6)
+  bar.rotation.x = Math.PI / 2
+  bar.position.set(17, 31, 0)
+  g.add(bar)
+  const hl = new THREE.Mesh(boxGeo, basic(0xffe34a))
+  hl.scale.set(3, 5, 6)
+  hl.position.set(26, 25, 0)
+  g.add(hl)
+  const ex = cyl(1.6, 2, 20, 0x9aa1ad, 6)
+  ex.rotation.z = Math.PI / 2 - 0.2
+  ex.position.set(-12, 14, 6)
+  g.add(ex)
+  const fender = box(14, 2, 10, red, -22, 24, 0)
+  g.add(fender)
+  const wheels: THREE.Group[] = []
+  for (const x of [-22, 26]) {
+    const wg = new THREE.Group()
+    wg.position.set(x, 12, 0)
+    const tire = cyl(12, 12, 12, 0x15161a, 16)
+    tire.rotation.x = Math.PI / 2
+    wg.add(tire)
+    // tacos de paleta para la arena
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      const pad = box(3, 2.4, 13, 0x2a2d35, Math.cos(a) * 12.6, Math.sin(a) * 12.6, 0, false)
+      pad.rotation.z = a + Math.PI / 2
+      wg.add(pad)
+    }
+    const hub = cyl(4, 4, 13, 0xffc61a, 8)
+    hub.rotation.x = Math.PI / 2
+    wg.add(hub)
+    g.add(wg)
+    wheels.push(wg)
+  }
+  g.userData = { wheels }
+  return g
+}

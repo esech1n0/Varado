@@ -23,6 +23,8 @@
     <div class="wake-blur"></div>
   </div>
 
+  <div id="iris" class="hidden"></div>
+
   <div id="hud" class="hidden">
     <div id="hp">
       <div class="lbl">VIDA</div>
@@ -43,6 +45,7 @@
           title="14 piezas: munición y granadas infinitas">MUNICIÓN ∞</i></span></div>
     <div id="fuel" title="Piedras ignífugas (combustible del cohete)"><i class="gem"></i><b
         id="fuelN">0</b><span>/</span><span id="fuelT">3</span></div>
+    <div id="upgrades"></div>
     <div id="objective"></div>
     <div id="boss" class="hidden">
       <div class="nm" id="bossName"></div>
@@ -68,7 +71,7 @@
     <div id="buggy-marker" class="hidden">
       <div class="buggy-marker-body">
         <span class="buggy-ico">🚙</span>
-        <span class="buggy-txt">BUGGY</span>
+        <span class="buggy-txt">VEHÍCULO</span>
         <span class="buggy-dst" id="buggyDstNum">0m</span>
       </div>
       <div class="buggy-arrow"></div>
@@ -93,7 +96,7 @@
       <div class="prog-meta">
         <span class="prog-label"><i class="planet-ico">🪐</i> PLANETA HOSTIL</span>
         <span id="space-time">3:00</span>
-        <span class="prog-label"><i class="planet-ico">🪐</i> JÚPITER VECINO</span>
+        <span class="prog-label"><i class="planet-ico">🪐</i> BERSHNA</span>
       </div>
       <div class="prog-track">
         <div id="space-fill"></div>
@@ -129,6 +132,7 @@
         <button class="btn" id="btn-menu-skins">Aspecto</button>
         <button class="btn" id="btn-menu-settings">Configuración</button>
         <button class="btn" id="btn-menu-ach">Logros</button>
+        <button class="btn eval" id="btn-menu-eval">Evaluar juego</button>
       </div>
       <div class="hint" id="load-hint">Preparando el planeta…</div>
     </div>
@@ -276,9 +280,7 @@
     <div class="panel danger">
       <h2 id="dead-title">¡CAÍSTE!</h2>
       <p class="story" id="dead-text">La horda te alcanzó.</p>
-      <a class="btn eval" id="eval-dead"
-        href="https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit" target="_blank"
-        rel="noopener noreferrer">Evaluar el Juego</a>
+      <button class="btn eval" id="eval-dead" type="button">Evaluar el Juego</button>
       <div class="stats" id="dead-stats"></div>
       <button class="btn primary" id="btn-retry">Reintentar desde la baliza</button>
     </div>
@@ -288,7 +290,7 @@
     <div class="panel danger">
       <h2>¡COHETE DESTRUIDO!</h2>
       <p class="story">
-        El cinturón de meteoritos destrozó el casco de la nave antes de alcanzar Júpiter.
+        El cinturón de meteoritos destrozó el casco de la nave antes de alcanzar Bershna.
       </p>
       <div class="stats" id="space-dead-stats"></div>
       <button class="btn primary" id="btn-space-retry">Reintentar Nivel 2</button>
@@ -300,15 +302,18 @@
     <div class="panel win">
       <h2>¡MISIÓN CUMPLIDA!</h2>
       <p class="story">
-        ¡Has atravesado el peligroso cinturón de meteoritos y entrado con éxito en la órbita de Júpiter! La nave
-        resistió el viaje y estás a salvo en el planeta vecino.
+        Con las ocho piedras de ignición a bordo, el cohete deja atrás Bershna y pone rumbo a Debhor. En algún
+        lugar de ese planeta, tu escuadrón sigue esperando.
       </p>
-      <a class="btn eval" id="eval-end"
-        href="https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit" target="_blank"
-        rel="noopener noreferrer">Evaluar el Juego</a>
+      <button class="btn eval" id="eval-end" type="button">Evaluar el Juego</button>
       <div class="stats" id="end-stats"></div>
       <button class="btn primary" id="btn-again">Volver al menú</button>
     </div>
+  </div>
+
+  <!-- Encuesta de evaluación integrada -->
+  <div class="ovl hidden" id="ovl-survey">
+    <div class="panel survey" id="survey-body"></div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

@@ -266,7 +266,9 @@ export class SpaceLevel {
     tex.wrapT = THREE.ClampToEdgeWrapping
 
     const jupGeo = new THREE.SphereGeometry(90, 32, 28)
+    // Bershna: el mismo planeta de bandas, teñido de rojo desértico
     const jupMat = new THREE.MeshStandardMaterial({
+      color: 0xff8468,
       map: tex,
       roughness: 0.65,
       metalness: 0.05,
@@ -281,7 +283,7 @@ export class SpaceLevel {
     // Halo atmosférico brillante
     const glowGeo = new THREE.SphereGeometry(96, 28, 24)
     const glowMat = new THREE.MeshBasicMaterial({
-      color: 0xdeb88c,
+      color: 0xf08a6a,
       transparent: true,
       opacity: 0.22,
       side: THREE.BackSide,

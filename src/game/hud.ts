@@ -12,6 +12,8 @@ export class Hud {
   private radioTimer = 0
   private toastTimer = 0
   private hintTimer = 0
+  private irisTimer = 0
+  private irisRaf = 0
   private lastHp = -1
   private lastWeapons = ''
   private lastStamina = ''
@@ -37,7 +39,7 @@ export class Hud {
   }
 
   setFuel(carried: number, placed = 0, total = 3): void {
-    const val = `${carried}-${placed}`
+    const val = `${carried}-${placed}-${total}`
     if (val === this.lastFuel) return
     this.lastFuel = val
     $('fuelN').textContent = String(carried)
@@ -56,6 +58,27 @@ export class Hud {
     setTimeout(() => {
       el.className = 'hidden'
     }, 4500)
+  }
+
+  /** Pantalla en negro durante `hold` ms y luego un círculo que se abre desde el centro hasta mostrar el juego. */
+  irisOpen(hold = 2000, dur = 2600): void {
+    const el = $('iris')
+    cancelAnimationFrame(this.irisRaf)
+    clearTimeout(this.irisTimer)
+    el.style.background = '#000'
+    el.classList.remove('hidden')
+    this.irisTimer = window.setTimeout(() => {
+      const t0 = performance.now()
+      const max = Math.hypot(innerWidth, innerHeight) / 2 + 120
+      const step = (now: number): void => {
+        const k = Math.min(1, (now - t0) / dur)
+        const r = k * k * (3 - 2 * k) * max - 120 * (1 - k)
+        el.style.background = `radial-gradient(circle at 50% 50%, transparent ${r}px, #000 ${r + 120}px)`
+        if (k < 1) this.irisRaf = requestAnimationFrame(step)
+        else el.classList.add('hidden')
+      }
+      this.irisRaf = requestAnimationFrame(step)
+    }, hold)
   }
 
   /** Muestra sugerencia emergente de controles o recordatorios de misión. */
@@ -132,6 +155,13 @@ export class Hud {
     }
   }
 
+  /** Mejoras de vehículo conseguidas (sólo aparecen en Bershna). */
+  setUpgrades(names: string[]): void {
+    const el = $('upgrades')
+    const html = names.length ? '<span>VEHÍCULO</span>' + names.map(n => `<i>${n}</i>`).join('') : ''
+    if (el.innerHTML !== html) el.innerHTML = html
+  }
+
   setObjective(html: string): void {
     if (html === this.lastObj) return
     this.lastObj = html
@@ -189,7 +219,10 @@ export class Hud {
     this.capTimer = window.setTimeout(() => el.classList.remove('on'), ms)
   }
 
-  radio(text: string, ms = 5200): void {
+  radio(text: string, ms = 5200, tag = 'TÚ'): void {
+    const el = $('radio')
+    el.querySelector('.tag')!.textContent = tag
+    el.classList.toggle('remote', tag !== 'TÚ')
     $('radioText').textContent = text
     $('radio').classList.add('on')
     clearTimeout(this.radioTimer)

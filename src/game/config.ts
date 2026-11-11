@@ -198,7 +198,7 @@ export const STAMINA = {
 }
 
 // ---------- Enemigos Among Us ----------
-export type AlienKind = 'soldier' | 'shooter' | 'tank' | 'boss'
+export type AlienKind = 'soldier' | 'shooter' | 'tank' | 'boss' | 'acid' | 'licker' | 'rock' | 'colossus'
 
 export type AlienDef = {
   kind: AlienKind
@@ -218,7 +218,39 @@ export const ALIENS: Record<AlienKind, AlienDef> = {
   soldier: { kind: 'soldier', label: 'Soldadito', hp: 30, speed: 158, r: 13, height: 40, melee: 8, meleeCd: 0.75, aggro: 560, color: '#ff4a4a' },
   shooter: { kind: 'shooter', label: 'Tirador', hp: 55, speed: 96, r: 14, height: 44, melee: 6, meleeCd: 1.2, aggro: 700, color: '#35e0ff' },
   tank: { kind: 'tank', label: 'Tanque', hp: 420, speed: 62, r: 31, height: 78, melee: 36, meleeCd: 1.3, aggro: 620, color: '#59c25a' },
+  // Bershna: escupidor verde (algo más rápido que el rojo), lengua morado, acorazado café y el coloso final
+  acid: { kind: 'acid', label: 'Escupidor', hp: 40, speed: 176, r: 13, height: 42, melee: 6, meleeCd: 1.1, aggro: 640, color: '#7dff3a' },
+  licker: { kind: 'licker', label: 'Lengua', hp: 48, speed: 150, r: 14, height: 44, melee: 12, meleeCd: 1.5, aggro: 600, color: '#a04aff' },
+  rock: { kind: 'rock', label: 'Acorazado', hp: 36, speed: 74, r: 20, height: 58, melee: 16, meleeCd: 1.2, aggro: 560, color: '#8a5a34' },
+  colossus: { kind: 'colossus', label: 'Coloso de Roca', hp: 2300, speed: 82, r: 70, height: 200, melee: 42, meleeCd: 1.2, aggro: 1100, color: '#8a5a34' },
   boss: { kind: 'boss', label: 'Jefe Impostor', hp: 1700, speed: 84, r: 66, height: 190, melee: 45, meleeCd: 1.2, aggro: 1000, color: '#b04aff' },
+}
+
+/** Mejoras para los vehículos que se encuentran tiradas por Bershna. */
+export type UpgradeId = 'spikes' | 'tires' | 'engine' | 'armor'
+export const UPGRADES: { id: UpgradeId; name: string; short: string; desc: string }[] = [
+  { id: 'spikes', name: 'Defensa con picos', short: 'PICOS', desc: 'Los atropellos hacen el doble de daño y apenas frenan el vehículo.' },
+  { id: 'tires', name: 'Llantas de arena', short: 'LLANTAS', desc: 'Los vehículos alcanzan un 15% más de velocidad.' },
+  { id: 'engine', name: 'Motor turbo', short: 'TURBO', desc: 'Los vehículos aceleran un 35% más rápido.' },
+  { id: 'armor', name: 'Blindaje', short: 'BLINDAJE', desc: 'Recibes un 40% menos de daño mientras conduces.' },
+]
+
+/** Vida de la armadura de roca de los acorazados. */
+export const ROCK_ARMOR = 150
+
+/** Planeta Bershna (segundo planeta): vive en la misma escena, desplazado lejos en X. */
+export const BERSHNA = {
+  x0: 40000, x1: 51200, y0: -2700, y1: 2700,
+  ship: { x: 41000, y: 0 },
+  /** Mitad del lado del perímetro amurallado y de la abertura de su portón (lado este). */
+  lzHalf: 520,
+  gateHalf: 140,
+  /** Vestíbulo de la torre de control y centro del fuste de la escalera. */
+  hallX: 48900,
+  towerX: 49785,
+  towerTop: 300,
+  stairTurns: 2.5,
+  fuel: 8,
 }
 
 export const IMPOSTOR_HP = 200
@@ -233,4 +265,8 @@ export const LEGO_PERKS = {
   /** Munición y granadas infinitas. */
   infinite: 14,
 }
-export const FORM_URL = 'https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit'
+/**
+ * Destino opcional de las respuestas de la encuesta integrada. Vacío = sólo se guardan en el navegador
+ * del jugador (que puede descargarlas o copiarlas). Con una URL, cada respuesta se envía por POST como JSON.
+ */
+export const SURVEY_ENDPOINT = 'https://script.google.com/macros/s/AKfycbz1uVE8C2B0nZzcZqryiIQiPAPfjrgOK_Ck3HmK7r32NgGvV_Mmj5GVLGyMBPlVCxO9/exec'

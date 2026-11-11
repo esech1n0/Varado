@@ -1,26 +1,37 @@
 import * as THREE from 'three'
 import {
   ALIENS, ARENA, BY0, BY1, CONFIG, DOOR_H, GRENADE, IMPOSTOR_HP, LEGO_TOTAL, MAX_HP, ROOM_H, SETTINGS, SHIP, SNIPER, STAMINA, WALL_H, WEAPONS, WEAPON_ORDER, WORLD, ZC_END,
-  BOSS_GRENADE_FRAC, FUEL_TOTAL, DIFFICULTIES, LEGO_PERKS, type AlienKind, type AmmoWeapon, type WeaponId, type DifficultyId, type DifficultyDef, type Quality
+  BOSS_GRENADE_FRAC, FUEL_TOTAL, DIFFICULTIES, LEGO_PERKS, BERSHNA, ROCK_ARMOR, UPGRADES, type UpgradeId, type AlienKind, type AmmoWeapon, type WeaponId, type DifficultyId, type DifficultyDef, type Quality
 } from './config'
-import { beep, engineSet, engineStop, setMusicMode, sfx } from './audio'
+import { beep, engineSet, engineStop, noise, setMusicMode, sfx } from './audio'
 import { achievements } from './achievements'
 import { Fx } from './fx'
 import { Grid, angDiff, clamp, distSegPoint, inRect, lerp, losClear, moveCircle, rayDistance, rnd, segEnter, type Rect } from './geom'
 import {
-  basic, makeAmmo, makeBeacon, makeBone, makeBuggy, makeFuelStone, makeGenerator, makeGun, makeImpostor, makeLego, makeMedkit, makePlayer, makeRocket, makeTurret,
+  basic, box, cyl, makeAmmo, makeBeacon, makeBone, makeBuggy, makeGunBuggy, makeMoto, makeFuelStone, makeGenerator, makeGun, makeImpostor, makeLego, makeMedkit, makePlayer, makeRocket, makeTurret,
   type ImpostorRig, type PlayerRig, type TurretRig,
 } from './gfx'
 import { SpaceLevel } from './spaceLevel'
 import { selectedSkin, type SkinId } from './skins'
 import { Hud, type RadarDot } from './hud'
 import { Input } from './input'
-import { instance, setBaseGlow } from './models'
+import { instance, setBaseGlow, type ModelKey } from './models'
+import { isAlien2, makeAlien2, type Alien2Rig } from './aliens2'
+import { buildBershna, type BershnaData, type VehicleKind } from './world2'
 import { buildWorld, doorPanels, setDoor, type DoorRig, type FenceSpawn, type PlateSpawn, type WorldData } from './world'
 
 export type PickupKind = 'medkit' | 'ammo' | 'rifle' | 'shotgun' | 'pistol' | 'plasma' | 'sniper'
-export type Mode = 'menu' | 'play' | 'dead' | 'ending' | 'space' | 'space_dead' | 'end'
-export type DeathCause = 'soldier' | 'shooter' | 'tank' | 'boss' | 'impostor' | 'turret' | 'fence' | 'plasma' | 'grenade'
+export type Mode = 'menu' | 'play' | 'dead' | 'ending' | 'space' | 'space_dead' | 'end' | 'cutscene'
+export type DeathCause = 'soldier' | 'shooter' | 'tank' | 'boss' | 'impostor' | 'turret' | 'fence' | 'plasma' | 'grenade' | 'acid' | 'licker' | 'rock' | 'colossus'
+export interface Vehicle { kind: VehicleKind; lv: 1 | 2; x: number; y: number; h: number; v: number; r: number; riding: boolean; spin: number; boarded: boolean; bump: number; mesh: THREE.Group }
+/** Velocidad, aceleración y giro de cada vehículo respecto al buggy normal. */
+const VEHICLE: Record<VehicleKind, { name: string; speed: number; accel: number; steer: number }> = {
+  buggy: { name: 'buggy', speed: 1, accel: 1, steer: 1 },
+  gun: { name: 'buggy artillado', speed: 0.95, accel: 0.95, steer: 1 },
+  moto: { name: 'moto', speed: 1.25, accel: 1.35, steer: 1.25 },
+}
+/** Alcance de la lengua del coloso. */
+const COLOSSUS_LICK = 300
 
 export interface FuelStone { x: number; y: number; z: number; taken: boolean; mesh: THREE.Group; glow: THREE.Mesh; ph: number }
 export interface Grenade { x: number; y: number; z: number; vx: number; vy: number; vz: number; fuse: number; stuck: null | { type: 'wall' } | { type: 'enemy'; e: Enemy; dx: number; dy: number } | { type: 'imp'; dx: number; dy: number }; mesh: THREE.Group; core: THREE.Mesh; light: THREE.Mesh }
@@ -32,7 +43,7 @@ export interface Turret { x: number; y: number; hp: number; state: 'idle' | 'loc
 export interface Gen { x: number; y: number; hp: number; alive: boolean; mesh: THREE.Group; core: THREE.Mesh }
 export interface Fence { spec: FenceSpawn; a: Gen; b: Gen; beams: THREE.Mesh[]; on: boolean; warn: boolean; len: number; ang: number }
 export interface Plate { spec: PlateSpawn; mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; hitCycle: number }
-export interface Beacon { x: number; y: number; name: string; active: boolean; mesh: THREE.Group; lamp: THREE.MeshBasicMaterial; ring: THREE.MeshBasicMaterial; buggyX?: number; buggyY?: number; buggyH?: number }
+export interface Beacon { x: number; y: number; name: string; active: boolean; mesh: THREE.Group; lamp: THREE.MeshBasicMaterial; ring: THREE.MeshBasicMaterial; buggyX?: number; buggyY?: number; buggyH?: number; lv?: number }
 export interface Bullet { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; mesh: THREE.Mesh; speed: number }
 export interface EProj { x: number; y: number; vx: number; vy: number; life: number; dmg: number; mesh: THREE.Object3D; cause: DeathCause }
 export interface Enemy {
@@ -42,6 +53,8 @@ export interface Enemy {
   stuckT: number; lx: number; ly: number; detour: number; dd: number; t: number; deadT: number; hitCar: number
   wind: null | { type: string; t: number; dir?: number }; strafe: number; charging: number; cdir: number
   stage: number; vis: THREE.Group | null; pulse: number
+  /** Armadura de roca restante (acorazados) y marca de los aliens del vestíbulo de la torre. */
+  armor: number; hall?: boolean
 }
 
 const bulletGeo = new THREE.BoxGeometry(1, 1, 1)
@@ -117,7 +130,29 @@ export class Game {
     grenades: 0, hasGrenade: false, grenadeCd: 0, zoomed: false,
     fuelCarried: 0, fuelPlaced: 0,
   }
-  buggy = { x: 2260, y: 270, h: 0, v: 0, r: 26, riding: false, spin: 0, boarded: false, bump: 0 }
+  buggy: Vehicle = { kind: 'buggy', lv: 1, x: 2260, y: 270, h: 0, v: 0, r: 26, riding: false, spin: 0, boarded: false, bump: 0, mesh: this.buggyM }
+  vehicles: Vehicle[] = [this.buggy]
+  // segundo planeta
+  level: 1 | 2 = 1
+  b!: BershnaData
+  l2 = this.freshL2()
+  /** Altura del suelo bajo el jugador (escalera y salas altas de la torre). */
+  pz = 0
+  fuelNeed = FUEL_TOTAL
+  /** Lo llama el juego al terminar el nivel del cohete; main.ts muestra las viñetas de llegada. */
+  onArrive: (() => void) | null = null
+  /** Mejoras de vehículo conseguidas en Bershna. */
+  upg: Record<UpgradeId, boolean> = { spikes: false, tires: false, engine: false, armor: false }
+  /** El jugador está bajo techo (torre de control): sin tormenta y con luz interior. */
+  indoor = false
+  private upgradeItems: { id: UpgradeId; x: number; y: number; taken: boolean; mesh: THREE.Group; halo: THREE.Mesh; ph: number }[] = []
+  private storm!: THREE.Points
+  private stormPos!: Float32Array
+  private fuels1: FuelStone[] = []
+  private fuels2: FuelStone[] = []
+  private bg = new THREE.Color().setRGB(0.012, 0.02, 0.1)
+  private l2Loadout: null | { owned: Record<WeaponId, boolean>; ammo: Record<AmmoWeapon, number>; grenades: number; hasGrenade: boolean; weapon: WeaponId; lego: number } = null
+  private spaceStats: null | { elapsed: number; score: number; asteroidsDestroyed: number } = null
   cp: { x: number; y: number; name: string; buggyX?: number; buggyY?: number; buggyH?: number } = { x: 110, y: 270, name: 'Inicio' }
   garageDoorAnim = false
   garageDoorOpenT = 0
@@ -147,7 +182,7 @@ export class Game {
   beams: Beam[] = []
   eprojs: EProj[] = []
   bones: { mesh: THREE.Group; t: number }[] = []
-  private vpool: Record<AlienKind, THREE.Group[]> = { soldier: [], shooter: [], tank: [], boss: [] }
+  private vpool: Record<AlienKind, THREE.Group[]> = { soldier: [], shooter: [], tank: [], boss: [], acid: [], licker: [], rock: [], colossus: [] }
   private nextId = 1
   hordeT = 14
   hordeCount = 0
@@ -157,7 +192,7 @@ export class Game {
   weaponKick = 0
   deadT = 0
   endT = 0
-  radioQ: { t: number; text: string }[] = []
+  radioQ: { t: number; text: string; tag?: string }[] = []
   private shownObjective = ''
   private ending = { t: 0, fade: false, shown: false }
   private tmpV = new THREE.Vector3()
@@ -181,6 +216,10 @@ export class Game {
 
     this.world = buildWorld(this.scene)
     this.grid = this.world.grid
+    this.b = buildBershna(this.scene, this.grid)
+    this.buildStorm()
+    const height1 = this.world.heightAt
+    this.world.heightAt = (x, y) => (x > BERSHNA.x0 - 1000 ? this.height2(x, y) : height1(x, y))
     this.door1 = this.world.doors.d1
     this.door2 = this.world.doors.d2
     this.scene.add(this.dyn)
@@ -498,6 +537,8 @@ export class Game {
     this.buggyBeaconM.add(beamMesh, ring1, ring2, diamond)
     this.buggyBeaconM.visible = false
     this.dyn.add(this.buggyBeaconM)
+    this.fuels1 = this.fuels
+    this.buildBershnaEntities()
   }
 
   // ---------- Reinicio de partida ----------
@@ -515,6 +556,7 @@ export class Game {
     this.aimStance = 0
     this.weaponKick = 0
     this.mode = 'menu'
+    this.leaveBershna()
     Object.assign(this.p, {
       x: 110, y: 270, hp: MAX_HP, face: 0, walk: 0, moving: 0, cd: 0, inv: 0, kx: 0, ky: 0, weapon: 'pistol', danger: 99, alive: true,
       stamina: STAMINA.max, exhausted: false, staminaIdle: 0, running: false, dashT: 0, dashCd: 0, dashX: 0, dashY: 0,
@@ -642,6 +684,7 @@ export class Game {
       id: this.nextId++, kind, x, y, r: def.r, hp, maxHp: hp, face: rnd(0, 6.283), state: 'idle', roam, homeX: x, homeY: y, homeFace: 0,
       cd: rnd(0.2, 1) * this.diff.attack, atk: 0, ph: rnd(0, 6), flash: 0, flashOn: false, mv: 0, speedMul: rnd(0.9, 1.15) * this.diff.speed, stuckT: 0, lx: x, ly: y, detour: 0, dd: 1,
       t: 0, deadT: 0, hitCar: 0, wind: null, strafe: Math.random() < 0.5 ? 1 : -1, charging: 0, cdir: 0, stage: 0, vis: null, pulse: 0,
+      armor: kind === 'rock' ? ROCK_ARMOR * this.diff.hp : 0,
     }
     e.homeFace = e.face
     // sacar al enemigo de cualquier sólido
@@ -686,7 +729,7 @@ export class Game {
     }
     const def = ALIENS[kind]
     const vis = new THREE.Group()
-    const body = instance(kind, def.height, 'height', 0xcc2222)
+    const body = isAlien2(kind) ? makeAlien2(kind) : instance(kind as ModelKey, def.height, 'height', 0xcc2222)
     vis.add(body)
     if (kind === 'boss') setBaseGlow(body, 0x3a1060, 0.55)
     if (kind === 'tank') setBaseGlow(body, 0x0a2a0a, 0.25)
@@ -704,7 +747,7 @@ export class Game {
     vis.add(ring)
     // barra de vida (se orienta hacia la cámara)
     const bar = new THREE.Group()
-    const w = kind === 'boss' ? 150 : kind === 'tank' ? 54 : 34
+    const w = kind === 'boss' || kind === 'colossus' ? 150 : kind === 'tank' ? 54 : 34
     const back = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), basic(0x1b1838))
     back.scale.set(w + 4, 8, 1)
     const fill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), basic(0x46e07a))
@@ -758,8 +801,8 @@ export class Game {
   private objTimer = 0
   private radarDots: RadarDot[] = []
 
-  say(text: string, delay = 0): void {
-    this.radioQ.push({ t: delay, text })
+  say(text: string, delay = 0, tag?: string): void {
+    this.radioQ.push({ t: delay, text, tag })
   }
   private setDoors(): void {
     setDoor(this.door1, this.d1)
@@ -771,8 +814,9 @@ export class Game {
       q.t -= dt
       if (q.t <= 0) {
         this.radioQ.splice(i, 1)
-        this.hud.radio(q.text)
-        sfx.thought()
+        this.hud.radio(q.text, q.tag ? 7200 : 5200, q.tag)
+        if (q.tag) noise(0.5, 0.06, 1200)
+        else sfx.thought()
       }
     }
   }
@@ -808,7 +852,7 @@ export class Game {
       this.spaceLevel.update(dt)
       return
     }
-    if (this.mode === 'space_dead') {
+    if (this.mode === 'space_dead' || this.mode === 'cutscene') {
       return
     }
     this.t += dt
@@ -878,13 +922,14 @@ export class Game {
         this.hud.showControlHint(`Piedras ignífugas encontradas ${found}/3`, 5000)
       }, 7200)
     }
+    if (this.level === 2) this.updateBershna(dt)
     this.updateStamina(dt)
     this.handleWeaponKeys()
     this.interact()
     this.tryFire(dt)
     this.tryThrowGrenade(dt)
     this.updateGrenades(dt)
-    this.updateCorridor(dt)
+    if (this.level === 1) this.updateCorridor(dt)
     this.updatePickups()
     this.updateLegos(dt)
     this.updateBeacons()
@@ -1017,12 +1062,13 @@ export class Game {
     const b = this.buggy
     const p = this.p
     const { f, s } = this.input.axis()
-    const max = CONFIG.buggy.maxSpeed
-    if (f > 0) b.v += CONFIG.buggy.accel * f * dt * (b.v < 0 ? 2.2 : 1)
+    const veh = VEHICLE[b.kind]
+    const max = CONFIG.buggy.maxSpeed * veh.speed * (this.upg.tires ? 1.15 : 1)
+    if (f > 0) b.v += CONFIG.buggy.accel * veh.accel * (this.upg.engine ? 1.35 : 1) * f * dt * (b.v < 0 ? 2.2 : 1)
     else if (f < 0) b.v -= (b.v > 8 ? 560 : 260) * -f * dt
     else b.v -= Math.sign(b.v) * Math.min(Math.abs(b.v), 170 * dt)
     b.v = clamp(b.v, -150, max)
-    const steer = s * 2.1 * clamp(Math.abs(b.v) / 140, 0, 1) * (b.v < 0 ? -1 : 1)
+    const steer = s * 2.1 * veh.steer * clamp(Math.abs(b.v) / 140, 0, 1) * (b.v < 0 ? -1 : 1)
     b.h += steer * dt
     const c = { x: b.x, y: b.y, r: b.r }
     const hit = moveCircle(this.grid, this.extra, c, Math.cos(b.h) * b.v * dt, Math.sin(b.h) * b.v * dt)
@@ -1108,6 +1154,10 @@ export class Game {
     const p = this.p
     p.cd = Math.max(0, p.cd - dt)
     if (!p.alive || !this.input.fire) return
+    if (this.buggy.riding && this.buggy.kind === 'gun') {
+      this.fireMounted()
+      return
+    }
     const w = WEAPONS[p.weapon]
     if (!p.owned[w.id] || p.cd > 0) return
     if (w.id !== 'pistol' && !this.perkInfinite) {
@@ -1548,13 +1598,14 @@ export class Game {
 
   private interact(): void {
     const used = this.input.take('KeyE')
+    if (this.level === 2 && this.interact2(used)) return
     const b = this.buggy
     const p = this.p
     // texto de ayuda contextual
     let prompt = ''
-    if (b.riding) prompt = 'E · Bajar del buggy'
+    if (b.riding) prompt = `E · Bajar del ${VEHICLE[b.kind].name}`
     else if (!this.flags.leverPulled && this.nearLever()) prompt = 'E · Tirar de la palanca'
-    else if (this.nearBuggy() && this.flags.impDead) prompt = 'E · Subir al buggy'
+    else if (this.nearBuggy() && this.flags.impDead) prompt = `E · Subir al ${VEHICLE[b.kind].name}`
     else if (this.nearShip()) {
       if (!this.flags.bossDead) prompt = 'Escudo activo: derrota al jefe impostor'
       else if (p.fuelPlaced < 3) {
@@ -1659,19 +1710,21 @@ export class Game {
     this.input.consumeLook()
     if (this.mode === 'end') return
     e.t += dt
+    const pos = this.shipPos
+    const ship = this.shipMesh
     const lift = e.t > 0.9 ? Math.pow(e.t - 0.9, 2) * 90 : 0
-    this.shipM.position.set(SHIP.x + (e.t > 0.2 ? Math.sin(this.t * 60) * 1.2 : 0), lift, SHIP.y)
-    const stand = this.shipM.userData?.stand as THREE.Group | undefined
+    ship.position.set(pos.x + (e.t > 0.2 ? Math.sin(this.t * 60) * 1.2 : 0), lift, pos.y)
+    const stand = ship.userData?.stand as THREE.Group | undefined
     if (stand) {
       stand.position.y = -lift
     }
     if (e.t > 0.4) {
       // el chorro sale de la tobera central del cohete (y de las dos laterales), no de la torre
-      const jx = this.shipM.position.x
-      this.fx.jet(jx, SHIP.y, lift + 8, 5, 0xffa530, 320, 30, 0.6, 7)
-      this.fx.jet(jx, SHIP.y, lift + 8, 3, 0xfff2b0, 360, 16, 0.4, 5)
-      for (const sx of [-22, 22]) this.fx.jet(jx + sx, SHIP.y, lift + 6, 1, 0x8fe3ff, 300, 12, 0.35, 4)
-      this.fx.jet(jx, SHIP.y, 4, 2, 0xd8c79a, 80, 120, 0.9, 8)
+      const jx = ship.position.x
+      this.fx.jet(jx, pos.y, lift + 8, 5, 0xffa530, 320, 30, 0.6, 7)
+      this.fx.jet(jx, pos.y, lift + 8, 3, 0xfff2b0, 360, 16, 0.4, 5)
+      for (const sx of [-22, 22]) this.fx.jet(jx + sx, pos.y, lift + 6, 1, 0x8fe3ff, 300, 12, 0.35, 4)
+      this.fx.jet(jx, pos.y, 4, 2, 0xd8c79a, 80, 120, 0.9, 8)
     }
     this.shake = e.t > 0.4 && e.t < 3 ? 4 : 0
     if (e.t > 3.3 && !e.fade) {
@@ -1680,8 +1733,11 @@ export class Game {
     }
     if (e.t > 4.6 && !e.shown) {
       e.shown = true
-      this.hud.fade(false)
-      this.startLevel2()
+      if (this.level === 2) this.finale()
+      else {
+        this.hud.fade(false)
+        this.startLevel2()
+      }
     }
   }
 
@@ -1694,22 +1750,14 @@ export class Game {
     this.input.exitLock()
     setMusicMode('boss')
     this.spaceLevel.start({
-      onVictory: (stats) => {
-        this.mode = 'end'
+onVictory: (stats) => {
+        // fin del viaje: viñetas de llegada y, después, el planeta Bershna
+        this.spaceStats = stats
         this.spaceLevel.showHud(false)
-        const totalSec = Math.floor(this.runTime + stats.elapsed)
-        const m = Math.floor(totalSec / 60)
-        const s = Math.floor(totalSec % 60).toString().padStart(2, '0')
-        const lines = [
-          `Tiempo total <b>${m}:${s}</b>`,
-          `Destino <b>Planeta Júpiter alcanzado</b>`,
-          `Meteoritos destruidos <b>${stats.asteroidsDestroyed}</b>`,
-          `Puntuación espacial <b>${stats.score} pts</b>`,
-          `Aliens en tierra <b>${this.stats.kills}</b>`,
-          `Piezas LEGO <b>${this.stats.lego}/${LEGO_TOTAL}</b>`,
-        ]
-        this.hud.endScreen(lines)
-        sfx.win()
+        this.mode = 'cutscene'
+        setMusicMode('play')
+        if (this.onArrive) this.onArrive()
+        else this.startBershna()
       },
       onDefeat: (stats) => {
         this.mode = 'space_dead'
@@ -1918,14 +1966,15 @@ export class Game {
         f.taken = true
         f.mesh.visible = false
         p.fuelCarried++
-        this.hud.setFuel(p.fuelCarried, p.fuelPlaced, 3)
-        achievements.add('fuel')
+        this.hud.setFuel(p.fuelCarried, p.fuelPlaced, this.fuelNeed)
+        if (this.level === 1) achievements.add('fuel')
         sfx.pickup()
         this.fx.burst(f.x, f.y, 22, 0xff7722, 180, 0.6, 4, f.z + 10)
         const stonesFound = p.fuelCarried + p.fuelPlaced
-        this.hud.caption(`¡Piedra ignífuga obtenida! (${stonesFound}/3)`, 2600)
-        this.hud.showControlHint(`Piedras ignífugas encontradas ${stonesFound}/3`, 5000)
-        if (p.fuelCarried + p.fuelPlaced >= 3) {
+        const stoneName = this.level === 2 ? 'de ignición' : 'ignífuga'
+        this.hud.caption(`¡Piedra ${stoneName} obtenida! (${stonesFound}/${this.fuelNeed})`, 2600)
+        this.hud.showControlHint(`Piedras encontradas ${stonesFound}/${this.fuelNeed}`, 5000)
+        if (this.level === 1 && p.fuelCarried + p.fuelPlaced >= 3) {
           this.say('Ya tengo las 3 piedras ignífugas. Ahora al cohete de escape.', 0.5)
         }
       }
@@ -2087,6 +2136,7 @@ export class Game {
       achievements.add('camps')
       this.hud.caption(c.name, 1700)
     }
+    if (this.level === 2) return
     if (p.x > ARENA.x - 200 || this.inArena(p.x, p.y)) {
       achievements.add('bossReach')
     }
@@ -2226,7 +2276,9 @@ export class Game {
   hurtPlayer(dmg: number, sx: number, sy: number, push: number, cause: DeathCause): void {
     const p = this.p
     if (!p.alive || this.mode !== 'play' || p.inv > 0) return
-    p.hp -= dmg * CONFIG.difficulty.damageTaken
+    // en lo alto de la torre nada del suelo te alcanza
+    if (this.level === 2 && this.pz > 40 && cause !== 'grenade') return
+    p.hp -= dmg * CONFIG.difficulty.damageTaken * (this.buggy.riding && this.upg.armor ? 0.6 : 1)
     p.inv = dmg >= 30 ? 0.6 : 0.3
     p.danger = 0
     this.shake = Math.max(this.shake, dmg >= 30 ? 14 : 8)
@@ -2325,6 +2377,7 @@ export class Game {
       if (e.state === 'dead') continue
       if (Math.hypot(e.x - p.x, e.y - p.y) < 700) {
         if (e.roam) { e.hp = 0; e.state = 'dead'; e.deadT = 9; this.releaseVisual(e) }
+        else if (e.kind === 'colossus') e.wind = null
         else if (e.kind !== 'boss' || !this.flags.bossWoke) {
           e.state = 'idle'
           e.x = e.homeX
@@ -2338,6 +2391,8 @@ export class Game {
     if (im.state === 'chase' || im.state === 'forming') {
       Object.assign(im, { state: 'chase', x: 1500, y: 270, wind: null, charging: 0, stun: 1, spitCd: 2.5, chargeCd: 4, hp: Math.max(im.hp, IMPOSTOR_HP * 0.6) })
     }
+    this.l2.inShaft = false
+    this.pz = 0
     this.hud.overlay('dead', false)
     this.hud.showHud(true, this.input.touchMode)
     this.hud.caption(`Punto de control: ${cp.name}`, 1600)
@@ -2349,7 +2404,8 @@ export class Game {
     const f = this.flags
     const p = this.p
     let o: string
-    if (!p.owned.pistol && !f.boarded) o = 'Encuentra un <b>arma</b>'
+    if (this.level === 2) o = this.objective2()
+    else if (!p.owned.pistol && !f.boarded) o = 'Encuentra un <b>arma</b>'
     else if (!f.impDead) o = 'Sobrevive al <b>impostor</b> y abre paso'
     else if (!f.boarded) o = 'Sube al <b>buggy</b> al final del pasillo (E)'
     else if (f.bossDead) o = 'Aborda la <b>nave de escape</b> (E)'
@@ -2373,6 +2429,17 @@ export class Game {
     if (e.state !== 'idle') return
     e.state = 'chase'
     e.cd = rnd(0.2, 0.8)
+    if (e.kind === 'colossus') {
+      e.cd = 2
+      e.atk = 4.5
+      e.t = 2.5
+      this.hud.caption('¡COLOSO DE ROCA!', 3000)
+      sfx.roar()
+      this.shake = 14
+      setMusicMode('boss')
+      this.say('¡Viene del subsuelo! Un coloso de roca tapa la entrada... tendré que abrirme paso.', 1.2)
+      return
+    }
     if (e.kind === 'boss') {
       e.cd = 2.2
       e.atk = 5
@@ -2404,6 +2471,25 @@ export class Game {
 
   damageEnemy(e: Enemy, dmg: number, mark = true): void {
     if (e.state === 'dead') return
+    if (e.armor > 0) {
+      // la armadura de roca absorbe el daño hasta romperse
+      e.armor -= dmg
+      e.flash = 0.06
+      if (mark) {
+        sfx.hit()
+        this.hud.hitMarker()
+      }
+      this.fx.burst(e.x, e.y, 5, 0x8a7460, 150, 0.35, 3.5, 26)
+      if (e.state === 'idle') this.wake(e)
+      if (e.armor <= 0) {
+        e.armor = 0
+        sfx.slam()
+        this.shake = Math.max(this.shake, 6)
+        this.fx.burst(e.x, e.y, 26, 0x6e5a4c, 240, 0.7, 5, 28)
+        this.hud.caption('¡Armadura destruida!', 1100)
+      }
+      return
+    }
     e.hp -= dmg
     e.flash = 0.1
     if (mark) {
@@ -2439,7 +2525,7 @@ export class Game {
     const bone = makeBone()
     bone.position.set(e.x, 0, e.y)
     bone.rotation.y = rnd(0, 6.28)
-    bone.scale.setScalar(e.kind === 'boss' ? 3 : e.kind === 'tank' ? 1.6 : 1)
+    bone.scale.setScalar(e.kind === 'boss' || e.kind === 'colossus' ? 3 : e.kind === 'tank' ? 1.6 : 1)
     this.dyn.add(bone)
     this.bones.push({ mesh: bone, t: 0 })
     // botín (modificado por dificultad)
@@ -2454,6 +2540,26 @@ export class Game {
     } else if (e.kind === 'tank') {
       this.dropPickup('medkit', e.x - 20, e.y)
       if (r < 0.7) this.dropPickup('ammo', e.x + 20, e.y)
+    } else if (e.kind === 'acid') {
+      if (r < 0.26) this.dropPickup('ammo', e.x, e.y)
+      else if (r < 0.34) this.dropPickup('medkit', e.x, e.y)
+    } else if (e.kind === 'licker') {
+      if (r < 0.08) this.dropPickup('medkit', e.x, e.y)
+      else if (r < 0.19) this.dropPickup('ammo', e.x, e.y)
+    } else if (e.kind === 'rock') {
+      if (r < 0.4) this.dropPickup('medkit', e.x, e.y)
+      else if (r < 0.75) this.dropPickup('ammo', e.x, e.y)
+    } else if (e.kind === 'colossus') {
+      this.l2.bossDead = true
+      achievements.add('colossus')
+      this.shake = 20
+      this.hud.boss(null)
+      this.hud.caption('¡COLOSO DERROTADO!', 3200)
+      setMusicMode('play')
+      this.fx.burst(e.x, e.y, 60, 0x6e5a4c, 340, 1, 6, 50)
+      this.dropPickup('medkit', e.x - 40, e.y - 30)
+      this.dropPickup('ammo', e.x - 40, e.y + 30)
+      this.say('La entrada está libre. Cargo las piedras de ignición y despego hacia Debhor.', 1.5)
     } else if (e.kind === 'boss') {
       this.flags.bossDead = true
       achievements.add('boss')
@@ -2548,11 +2654,11 @@ export class Game {
       }
       // arrollamiento con el buggy
       if (b.riding && Math.abs(b.v) > 110 && d < e.r + b.r + 6 && e.hitCar <= 0) {
-        const dmg = Math.abs(b.v) * (e.kind === 'boss' ? 0.1 : 0.3)
+        const dmg = Math.abs(b.v) * (e.kind === 'boss' || e.kind === 'colossus' ? 0.1 : 0.3) * (this.upg.spikes ? 2 : 1)
         e.hitCar = 0.45
         e.x += Math.cos(b.h) * 28
         e.y += Math.sin(b.h) * 28
-        b.v *= e.kind === 'soldier' || e.kind === 'shooter' ? 0.93 : e.kind === 'tank' ? 0.6 : 0.45
+        b.v *= this.upg.spikes && e.kind !== 'boss' && e.kind !== 'colossus' ? 0.97 : e.kind === 'soldier' || e.kind === 'shooter' || e.kind === 'acid' || e.kind === 'licker' ? 0.93 : e.kind === 'tank' || e.kind === 'rock' ? 0.6 : 0.45
         this.shake = Math.max(this.shake, 7)
         sfx.slam()
         this.damageEnemy(e, dmg)
@@ -2669,6 +2775,8 @@ export class Game {
       return
     }
 
+    if (this.chase2(e, dt, d, dx, dy)) return
+
     // ---- Jefe impostor ----
     e.t -= dt
     const frac = e.hp / e.maxHp
@@ -2747,7 +2855,7 @@ export class Game {
   /** Separación: los aliens se amontonan sin atravesarse, y los grandes empujan a los pequeños. */
   private separate(): void {
     const list = this.enemies.filter(e => e.state !== 'dead' && e.vis)
-    const mass = (k: AlienKind) => (k === 'soldier' ? 1 : k === 'shooter' ? 1.2 : k === 'tank' ? 4 : 14)
+    const mass = (k: AlienKind) => (k === 'soldier' || k === 'acid' || k === 'licker' ? 1 : k === 'shooter' ? 1.2 : k === 'rock' ? 2.5 : k === 'tank' ? 4 : 14)
     for (let i = 0; i < list.length; i++) {
       const a = list[i]
       for (let j = i + 1; j < list.length; j++) {
@@ -2774,6 +2882,10 @@ export class Game {
   }
 
   private spawnHorde(dt: number): void {
+    if (this.level === 2) {
+      this.spawnHorde2(dt)
+      return
+    }
     const p = this.p
     if (!this.flags.boarded || p.x < ZC_END + 250 || this.inArena(p.x, p.y) || !p.alive) return
     this.hordeT -= dt
@@ -2803,6 +2915,815 @@ export class Game {
   private mkRoamer(kind: AlienKind, x: number, y: number): void {
     const e = this.placeEnemy(kind, x, y, true)
     e.state = 'chase'
+  }
+
+  // ================= Planeta Bershna (segundo planeta) =================
+  private freshL2() {
+    return {
+      stairW: 0, stairTh: 0, inShaft: false, hallLeft: 1, comms: 0 as 0 | 1 | 2, commsT: 0, lever: false, doorT: 0,
+      bossSpawned: false, bossDead: false, stonesMsg: false, hallMsg: false, clearMsg: false,
+    }
+  }
+  private get stairMax(): number { return BERSHNA.stairTurns * Math.PI * 2 }
+  get shipPos(): { x: number; y: number } { return this.level === 2 ? BERSHNA.ship : SHIP }
+  private get shipMesh(): THREE.Group { return this.level === 2 ? this.b.ship : this.shipM }
+  private get gatePos(): { x: number; y: number } { return { x: BERSHNA.ship.x + BERSHNA.lzHalf, y: BERSHNA.ship.y } }
+
+  /** Altura del suelo en Bershna: la escalera de caracol depende de cuánto ha subido el jugador. */
+  private height2(x: number, y: number): number {
+    const t = this.b.tower
+    if (Math.hypot(x - t.cx, y - t.cy) < 168) return (clamp(this.l2.stairW, 0, this.stairMax) / this.stairMax) * BERSHNA.towerTop
+    return this.b.heightAt(x, y)
+  }
+
+  private buildBershnaEntities(): void {
+    const b = this.b
+    for (const s of b.pickups) this.pickups.push(this.makePickup(s.kind, s.x, s.y, false, s.z ?? 0))
+    for (const s of b.beacons) {
+      const mesh = makeBeacon()
+      mesh.position.set(s.x, 0, s.y)
+      const lamp = (mesh.userData.lamp as THREE.Mesh).material as THREE.MeshBasicMaterial
+      const ring = (mesh.userData.ring as THREE.Mesh).material as THREE.MeshBasicMaterial
+      b.root.add(mesh)
+      this.beacons.push({ x: s.x, y: s.y, name: s.name, active: false, mesh, lamp, ring, lv: 2 })
+    }
+    this.world.sites.push(...b.sites)
+    this.buildUpgradeItems()
+    for (const s of b.tower.stones) {
+      const mesh = makeFuelStone()
+      const glow = this.glowRing(0xff8a1f, 22)
+      b.root.add(mesh, glow)
+      mesh.position.set(s.x, BERSHNA.towerTop + 8, s.y)
+      glow.position.set(s.x, BERSHNA.towerTop + 10, s.y)
+      this.fuels2.push({ x: s.x, y: s.y, z: BERSHNA.towerTop, taken: false, mesh, glow, ph: Math.random() * 6 })
+    }
+    for (const s of b.vehicles) {
+      const mesh = s.kind === 'gun' ? makeGunBuggy() : s.kind === 'moto' ? makeMoto() : makeBuggy()
+      b.root.add(mesh)
+      this.addVehicleExtras(mesh, s.kind)
+      this.vehicles.push({ kind: s.kind, lv: 2, x: s.x, y: s.y, h: s.h, v: 0, r: s.kind === 'moto' ? 17 : 26, riding: false, spin: 0, boarded: false, bump: 0, mesh })
+    }
+  }
+
+  private buildUpgradeItems(): void {
+    this.b.upgrades.forEach((sp, i) => {
+      const id = UPGRADES[i % UPGRADES.length].id
+      const mesh = this.makeUpgradeMesh(id)
+      mesh.scale.setScalar(1.25)
+      mesh.position.set(sp.x, 10, sp.y)
+      const halo = this.glowRing(0x57f2ff, 30)
+      halo.position.set(sp.x, 2.5, sp.y)
+      this.b.root.add(mesh, halo)
+      this.upgradeItems.push({ id, x: sp.x, y: sp.y, taken: false, mesh, halo, ph: i * 1.7 })
+    })
+  }
+
+  /** Vuelve al primer planeta (se llama al reiniciar la partida). */
+  private leaveBershna(): void {
+    this.level = 1
+    this.b.root.visible = false
+    this.b.sky.visible = false
+    this.world.sky.visible = true
+    this.bg.setRGB(0.012, 0.02, 0.1)
+    this.sun.color.set(0xffffff)
+    this.amb.color.set(0xffffff)
+    this.hemi.color.set(0xbcd2ff)
+    this.hemi.groundColor.set(0x202840)
+    this.fuels = this.fuels1
+    this.fuelNeed = FUEL_TOTAL
+    this.buggy.riding = false
+    this.buggy = this.vehicles[0]
+    this.l2 = this.freshL2()
+    this.l2Loadout = null
+    this.indoor = false
+    this.storm.visible = false
+    this.applyQuality()
+    this.resetUpgrades()
+    this.b.ship.position.set(BERSHNA.ship.x, 0, BERSHNA.ship.y)
+    const stand = this.b.ship.userData?.stand as THREE.Group | undefined
+    if (stand) stand.position.y = 0
+  }
+
+  /** Empieza (o reinicia) el nivel de Bershna conservando el equipo con el que se llegó. */
+  startBershna(): void {
+    engineStop()
+    const p = this.p
+    const b = this.b
+    if (!this.l2Loadout) {
+      this.l2Loadout = { owned: { ...p.owned }, ammo: { ...p.ammo }, grenades: p.grenades, hasGrenade: p.hasGrenade, weapon: p.weapon, lego: this.stats.lego }
+    } else {
+      const s = this.l2Loadout
+      p.owned = { ...s.owned }
+      p.ammo = { ...s.ammo }
+      p.grenades = s.grenades
+      p.hasGrenade = s.hasGrenade
+      p.weapon = s.weapon
+      this.stats.lego = s.lego
+    }
+    if (!p.owned.pistol) p.owned.pistol = true
+    this.level = 2
+    b.root.visible = true
+    b.sky.visible = true
+    this.world.sky.visible = false
+    this.bg.set(0xb8553a)
+    this.sun.color.set(0xffd2a8)
+    this.amb.color.set(0xffe6d8)
+    this.hemi.color.set(0xffc9a0)
+    this.hemi.groundColor.set(0x5a2a20)
+
+    // limpiar lo que quede del planeta anterior
+    for (const e of this.enemies) this.releaseVisual(e)
+    this.enemies = []
+    for (const l of [this.bullets, this.spits, this.eprojs]) for (const o of l) this.projG.remove(o.mesh)
+    for (const g of this.grenades) this.projG.remove(g.mesh)
+    for (const o of this.blasts) this.projG.remove(o.mesh)
+    for (const o of this.beams) this.projG.remove(o.mesh)
+    this.bullets = []
+    this.spits = []
+    this.eprojs = []
+    this.grenades = []
+    this.blasts = []
+    this.beams = []
+    for (const o of this.bones) this.dyn.remove(o.mesh)
+    this.bones = []
+    this.fx.clear()
+    this.pickups = this.pickups.filter(k => {
+      if (k.dyn) {
+        this.itemsG.remove(k.mesh, k.glow)
+        return false
+      }
+      k.taken = false
+      return true
+    })
+    this.fuels = this.fuels2
+    this.fuelNeed = BERSHNA.fuel
+    for (const f of this.fuels) {
+      f.taken = false
+      f.mesh.visible = f.glow.visible = true
+    }
+    this.l2 = this.freshL2()
+    const t = b.tower
+    t.storeDoor.on = true
+    t.storeDoorMesh.position.y = BERSHNA.towerTop + 44
+    t.lever.arm.rotation.x = -0.65
+    t.lever.lamp.color.setHex(0xff3b4a)
+    for (const s of b.sites) s.visited = s.id === 'lz'
+    for (const c of b.camps) c.visited = !c.name
+    for (const bc of this.beacons) if (bc.lv === 2) this.setBeacon(bc, false)
+    this.buggy.riding = false
+    b.vehicles.forEach((s, i) => Object.assign(this.vehicles[i + 1], { x: s.x, y: s.y, h: s.h, v: 0, riding: false, spin: 0 }))
+    this.buggy = this.vehicles[1]
+    b.ship.position.set(BERSHNA.ship.x, 0, BERSHNA.ship.y)
+    const stand = b.ship.userData?.stand as THREE.Group | undefined
+    if (stand) stand.position.y = 0
+
+    Object.assign(p, {
+      x: BERSHNA.ship.x + 190, y: BERSHNA.ship.y + 90, hp: MAX_HP, face: 0, walk: 0, moving: 0, cd: 0.4, inv: 1.5, kx: 0, ky: 0, danger: 99, alive: true,
+      stamina: this.staminaMax, exhausted: false, staminaIdle: 0, running: false, dashT: 0, dashCd: 0, zoomed: false, grenadeCd: 0,
+      fuelCarried: 0, fuelPlaced: 0,
+    })
+    this.pz = 0
+    this.yaw = 0
+    this.pitch = 0.42
+    this.camYaw = 0
+    this.camPitch = 0.42
+    this.camInit = false
+    this.cp = { x: p.x, y: p.y, name: 'Zona de aterrizaje' }
+    this.flags.impDead = true
+    this.flags.boarded = true
+    this.flags.fuelThought = true
+    this.flags.hordeMsg = false
+    this.deadShown = false
+    this.ending = { t: 0, fade: false, shown: false }
+    this.radioQ = []
+
+    // aliens de los campamentos y del vestíbulo de la torre, según la dificultad
+    for (const c of b.camps) {
+      const kinds: [AlienKind, number][] = [['licker', c.licker], ['acid', c.acid], ['rock', c.rock], ['soldier', c.soldier]]
+      for (const [k, n] of kinds) {
+        if (n <= 0) continue
+        const count = Math.max(1, Math.round(n * this.diff.spawn))
+        for (let i = 0; i < count; i++) {
+          const a = Math.random() * 6.283
+          const d = Math.sqrt(Math.random()) * c.spread
+          const e = this.placeEnemy(k, c.x + Math.cos(a) * d, c.y + Math.sin(a) * d, false)
+          if (c.hall) e.hall = true
+        }
+      }
+    }
+    this.resetUpgrades()
+    this.hordeT = 8
+    this.hordeCount = 0
+    this.noiseT = 0
+    this.mode = 'play'
+    setMusicMode('play')
+    achievements.add('bershna')
+    this.hud.showHud(true, this.input.touchMode)
+    this.hud.boss(null)
+    this.hud.fade(false)
+    this.hud.setFuel(0, 0, BERSHNA.fuel)
+    this.hud.setLego(this.stats.lego)
+    this.hud.setHp(MAX_HP, MAX_HP)
+    this.hud.irisOpen()
+    this.shownObjective = ''
+    this.hud.caption('Planeta Bershna', 3200)
+    this.say('Bershna. Aire respirable... y una tormenta de arena que no deja ver nada. Esas cúpulas llevan años abandonadas.', 5)
+    this.say('Si aquí hubo colonos, habrá una torre de control. Desde allí podré contactar con la Tierra.', 10.5)
+  }
+
+  /** Lógica por fotograma de Bershna: vehículo activo, torre, comunicaciones, almacén y jefe. */
+  private updateBershna(dt: number): void {
+    const p = this.p
+    const L = this.l2
+    const t = this.b.tower
+    const H = BERSHNA.towerTop
+
+    // el vehículo "activo" es el que conduces o, a pie, el más cercano
+    if (!this.buggy.riding) {
+      let best = this.buggy
+      let bd = 1e9
+      for (const v of this.vehicles) {
+        if (v.lv !== 2) continue
+        const d = Math.hypot(v.x - p.x, v.y - p.y)
+        if (d < bd) { bd = d; best = v }
+      }
+      if (best !== this.buggy) {
+        this.buggy.v = 0
+        this.buggy = best
+      }
+    }
+
+    // escalera de caracol: la altura sale del ángulo acumulado alrededor del fuste
+    const dx = p.x - t.cx
+    const dy = p.y - t.cy
+    const d = Math.hypot(dx, dy)
+    const inside = d < 168 && !this.buggy.riding
+    if (inside) {
+      const th = Math.atan2(dy, dx)
+      if (!L.inShaft) {
+        L.inShaft = true
+        L.stairW = this.pz > H / 2 ? this.stairMax : 0
+      } else if (d > 46) L.stairW = clamp(L.stairW + angDiff(L.stairTh, th), 0, this.stairMax)
+      L.stairTh = th
+    } else L.inShaft = false
+    let hallLeft = 0
+    for (const e of this.enemies) if (e.hall && e.state !== 'dead') hallLeft++
+    L.hallLeft = hallLeft
+    const upstairs = !inside && this.pz > H - 5
+    t.doorBottom.on = hallLeft > 0 || (inside && L.stairW > 0.7) || upstairs
+    t.doorTop.on = !(upstairs || (inside && L.stairW > this.stairMax - 0.7))
+    t.barBottom.on = !inside || L.stairW < 1.5
+    t.barTop.on = inside && L.stairW > this.stairMax - 1.5
+    this.pz = this.world.heightAt(p.x, p.y)
+    this.indoor = this.b.roofs.some(rf => p.x >= rf.x && p.x <= rf.x + rf.w && p.y >= rf.y && p.y <= rf.y + rf.h && this.pz < rf.top)
+    this.updateUpgrades()
+
+    const inHall = inRect(p.x, p.y, t.hall)
+    if (inHall && hallLeft > 0 && !L.hallMsg) {
+      L.hallMsg = true
+      this.say('El vestíbulo está infestado. Tendré que limpiarlo para llegar a la escalera.', 0.4)
+    }
+    if (hallLeft === 0 && L.hallMsg && !L.clearMsg) {
+      L.clearMsg = true
+      sfx.door()
+      this.hud.caption('¡Vestíbulo despejado! La escalera está abierta', 2600)
+    }
+
+    // campamentos
+    for (const c of this.b.camps) {
+      if (c.visited || Math.hypot(p.x - c.x, p.y - c.y) > c.spread) continue
+      c.visited = true
+      this.hud.caption(c.name, 1700)
+    }
+
+    // pantallas de la sala de operaciones y baliza de la torre
+    t.beaconLamp.color.setHex(Math.floor(this.t * 1.5) % 2 ? 0xff3b4a : 0x4a1016)
+    const live = L.comms === 1
+    t.screens.forEach((s, i) => {
+      const fl = live ? Math.random() : 0.75 + Math.sin(this.t * 2 + i) * 0.2
+      s.color.setHex(i < 5 ? 0x57f2ff : 0x3bff8a).multiplyScalar(live && Math.random() < 0.25 ? 0.15 : fl)
+    })
+
+    // transmisión: primero la Tierra (sólo estática), luego el escuadrón (señal débil)
+    if (L.comms === 1) {
+      L.commsT += dt
+      if (Math.random() < dt * 5) noise(0.12 + Math.random() * 0.2, 0.05, 1500)
+      if (L.commsT > 27) {
+        L.comms = 2
+        achievements.add('comms')
+        this.hud.caption('Nuevo objetivo: piedras de ignición', 3000)
+      }
+    }
+
+    // puerta del almacén deslizándose hacia arriba
+    if (L.lever && L.doorT < 1) {
+      L.doorT = Math.min(1, L.doorT + dt / 1.4)
+      t.storeDoorMesh.position.y = H + 44 + L.doorT * 92
+      if (L.doorT > 0.5) t.storeDoor.on = false
+    }
+
+    const stones = p.fuelCarried + p.fuelPlaced
+    if (stones >= BERSHNA.fuel && !L.stonesMsg) {
+      L.stonesMsg = true
+      this.hordeT = 6
+      this.say('Las ocho piedras de ignición. Ahora, de vuelta al cohete... y no creo que me dejen irme tranquilo.', 0.6)
+    }
+
+    // el coloso aparece tapando la entrada de la zona de aterrizaje
+    const g = this.gatePos
+    if (L.stonesMsg && !L.bossSpawned && Math.hypot(p.x - g.x, p.y - g.y) < 1500) {
+      L.bossSpawned = true
+      for (const e of this.enemies) {
+        if (e.roam && e.state !== 'dead') { e.hp = 0; e.state = 'dead'; e.deadT = 0 }
+      }
+      const boss = this.placeEnemy('colossus', g.x + 110, g.y, false)
+      boss.face = 0
+      this.wake(boss)
+    }
+  }
+
+  private startComms(): void {
+    const L = this.l2
+    L.comms = 1
+    L.commsT = 0
+    sfx.lever()
+    this.say('Torre de control de Bershna llamando a la Tierra. ¿Me reciben? Solicito extracción inmediata.', 0.4)
+    this.say('… Ruido de estática …', 5.5, 'TIERRA')
+    this.say('Nada. Ni una portadora. Probaré con la frecuencia de mi escuadrón.', 10)
+    this.say('…kzzt… aquí escuadrón… ¿hay alguien…? …kzzt… perdimos la nave… nos dirigimos al planeta… kzzt… Debhor… repito… Debhor… kzzt…', 14.5, 'ESCUADRÓN')
+    this.say('¡Debhor! Siguen vivos. Necesito combustible para alcanzarlos: ocho piedras de ignición.', 21)
+    this.say('Esa palanca abre el almacén de al lado. Me abastezco, cargo las piedras y vuelvo al cohete.', 26)
+  }
+
+  /** Interacciones propias de Bershna. Devuelve true si atendió la tecla E / el texto de ayuda. */
+  private interact2(used: boolean): boolean {
+    if (this.buggy.riding) return false
+    const p = this.p
+    const L = this.l2
+    const t = this.b.tower
+    const need = BERSHNA.fuel
+    const near = (s: { x: number; y: number }, r: number): boolean => Math.hypot(p.x - s.x, p.y - s.y) < r
+    const up = this.pz > BERSHNA.towerTop - 5
+    if (up && L.comms === 0 && near(t.console, 80)) {
+      this.hud.prompt('E · Contactar con la Tierra')
+      if (used) this.startComms()
+      return true
+    }
+    if (up && L.comms === 2 && !L.lever && near(t.lever, 66)) {
+      this.hud.prompt('E · Tirar de la palanca del almacén')
+      if (used) {
+        L.lever = true
+        t.lever.arm.rotation.x = -0.5
+        t.lever.lamp.color.setHex(0x3bff8a)
+        sfx.lever()
+        sfx.door()
+        this.shake = 4
+        this.hud.caption('¡Almacén abierto!', 2200)
+      }
+      return true
+    }
+    if (near(BERSHNA.ship, 220)) {
+      const stones = p.fuelCarried + p.fuelPlaced
+      let prompt: string
+      if (stones < need) prompt = `El cohete necesita ${need} piedras de ignición (${stones}/${need})`
+      else if (!L.bossDead) prompt = 'Derrota al coloso de roca para poder despegar'
+      else if (p.fuelPlaced < need) prompt = `E · Cargar las piedras de ignición (${p.fuelPlaced}/${need})`
+      else prompt = 'E · ¡Despegar rumbo a Debhor!'
+      this.hud.prompt(prompt)
+      if (used && stones >= need && L.bossDead) {
+        if (p.fuelPlaced < need) {
+          p.fuelPlaced += p.fuelCarried
+          p.fuelCarried = 0
+          this.hud.setFuel(0, p.fuelPlaced, need)
+          sfx.fuel()
+          this.fx.burst(p.x, p.y, 30, 0xff7a22, 220, 0.8, 4, 30)
+          this.hud.caption('¡Cohete cargado y listo para despegar!', 3000)
+        } else this.launch()
+      } else if (used) sfx.hit()
+      return true
+    }
+    return false
+  }
+
+  private objective2(): string {
+    const p = this.p
+    const L = this.l2
+    const need = BERSHNA.fuel
+    const stones = p.fuelCarried + p.fuelPlaced
+    const dist = (x: number, y: number): number => Math.round(Math.hypot(x - p.x, y - p.y) / 10)
+    if (L.bossDead) return p.fuelPlaced < need ? 'Carga las <b>piedras de ignición</b> en el cohete (E)' : '<b>Despega</b> rumbo a Debhor (E)'
+    if (L.bossSpawned) return 'Derrota al <b>coloso de roca</b> que bloquea la zona de aterrizaje'
+    if (L.stonesMsg) return `Regresa al <b>cohete</b> con las piedras · ${dist(BERSHNA.ship.x, BERSHNA.ship.y)} m al oeste`
+    if (L.comms === 2) return L.lever ? `Abastécete y recoge las <b>piedras de ignición</b> · ${stones}/${need}` : 'Tira de la <b>palanca</b> para abrir el almacén (E)'
+    if (L.comms === 1) return 'Intentando establecer <b>conexión</b>…'
+    if (this.pz > BERSHNA.towerTop - 5) return 'Usa la <b>consola</b> para contactar con la Tierra (E)'
+    if (L.inShaft || L.clearMsg) return 'Sube la <b>escalera de caracol</b> hasta la sala de control'
+    if (L.hallMsg) return `Elimina a los aliens del <b>vestíbulo</b> · quedan ${L.hallLeft}`
+    return `Explora Bershna y encuentra la <b>torre de control</b> · ${dist(BERSHNA.hallX, 0)} m al este`
+  }
+
+  /** Hordas del camino de vuelta, con las ocho piedras ya recogidas. */
+  private spawnHorde2(dt: number): void {
+    const p = this.p
+    const L = this.l2
+    if (!L.stonesMsg || L.bossSpawned || !p.alive || this.pz > 40 || p.x > BERSHNA.hallX - 150) return
+    this.hordeT -= dt
+    if (this.hordeT > 0) return
+    this.hordeT = ((this.buggy.riding ? 11 : 15) + rnd(-2, 4)) / Math.max(0.7, this.diff.spawn)
+    let live = 0
+    for (const e of this.enemies) if (e.roam && e.state === 'chase') live++
+    if (live >= CONFIG.horde.cap) return
+    const n = Math.round((5 + rnd(0, 3)) * CONFIG.horde.size * this.diff.spawn)
+    // aparecen por delante, entre el jugador y el cohete
+    const a0 = Math.PI + rnd(-1.15, 1.15)
+    const dist = rnd(850, 1100)
+    const cx = clamp(p.x + Math.cos(a0) * dist, BERSHNA.ship.x + BERSHNA.lzHalf + 300, BERSHNA.x1 - 300)
+    const cy = clamp(p.y + Math.sin(a0) * dist, BERSHNA.y0 + 200, BERSHNA.y1 - 200)
+    for (let i = 0; i < n; i++) {
+      const k = Math.random()
+      this.mkRoamer(k < 0.45 ? 'licker' : k < 0.82 ? 'acid' : k < 0.93 ? 'soldier' : 'rock', cx + rnd(-110, 110), cy + rnd(-110, 110))
+    }
+    this.hordeCount += n
+    this.hud.caption('¡UNA HORDA TE CORTA EL PASO!', 2400)
+    sfx.roar()
+  }
+
+  /** Ametralladora montada en el buggy artillado: munición infinita, apunta donde miras. */
+  private fireMounted(): void {
+    const p = this.p
+    const b = this.buggy
+    if (p.cd > 0) return
+    p.cd = 0.075
+    this.lastFireT = this.t
+    const ox = b.x - Math.cos(b.h) * 24
+    const oy = b.y - Math.sin(b.h) * 24
+    const oz = 46
+    const target = this.getCrosshairTarget(750)
+    const dir = new THREE.Vector3(target.x - ox, target.y - oz, target.z - oy).normalize()
+    dir.add(new THREE.Vector3((Math.random() - 0.5) * 0.07, (Math.random() - 0.5) * 0.04, (Math.random() - 0.5) * 0.07)).normalize()
+    const m = new THREE.Mesh(bulletGeo, bulletMats.rifle)
+    m.scale.set(16, 2.8, 2.8)
+    m.position.set(ox, oz, oy)
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir)
+    this.projG.add(m)
+    this.bullets.push({ x: ox, y: oy, z: oz, vx: dir.x * 940, vy: dir.z * 940, vz: dir.y * 940, life: 0.95, dmg: 8, mesh: m, speed: 940 })
+    this.fx.burst(ox + dir.x * 22, oy + dir.z * 22, 2, 0x8fe3ff, 120, 0.1, 2.6, oz)
+    sfx.shoot([980, 360], 0.035)
+    this.shake = Math.max(this.shake, 1.4)
+    this.noiseT = 0.7
+  }
+
+  /** Aliens de Bershna: escupidor, lengua y acorazado. Devuelve true si el enemigo era uno de ellos. */
+  private chase2(e: Enemy, dt: number, d: number, dx: number, dy: number): boolean {
+    const p = this.p
+    const def = ALIENS[e.kind]
+    const want = Math.atan2(dy, dx)
+    const turn = Math.min(1, dt * 8)
+    const ridingFast = this.buggy.riding && Math.abs(this.buggy.v) >= 110
+    const pr = this.buggy.riding ? this.buggy.r : p.r
+    const ux = dx / (d || 1)
+    const uy = dy / (d || 1)
+
+    if (e.kind === 'acid') {
+      const los = losClear(this.grid, this.extra, e.x, e.y, p.x, p.y)
+      const spd = def.speed * e.speedMul
+      e.face += angDiff(e.face, want) * turn
+      if (e.wind) {
+        e.wind.t -= dt
+        e.mv = lerp(e.mv, 0, 0.3)
+        if (e.wind.t <= 0) {
+          const a = want + rnd(-0.07, 0.07)
+          this.spawnEProj(e.x + Math.cos(a) * e.r * 1.5, e.y + Math.sin(a) * e.r * 1.5, a, 310, 10, 'acid', 0x9dff3a, 6)
+          sfx.shoot([420, 150], 0.04)
+          e.wind = null
+        }
+      } else {
+        if (d > 380 || !los) this.steer(e, ux, uy, spd, dt, d)
+        else if (d < 200) this.steer(e, -ux, -uy, spd * 0.9, dt, d)
+        else {
+          this.steer(e, -uy * e.strafe, ux * e.strafe, spd * 0.7, dt, d)
+          if (Math.random() < dt * 0.5) e.strafe *= -1
+        }
+        if (los && d < 620 && e.cd <= 0) {
+          e.wind = { type: 'spit', t: 0.35 }
+          e.cd = (1.7 + rnd(0, 0.7)) * this.diff.attack
+        }
+      }
+      if (d < e.r + pr + 8 && e.atk <= 0 && !ridingFast) {
+        this.hurtPlayer(def.melee, e.x, e.y, 40, 'acid')
+        e.atk = def.meleeCd
+      }
+      return true
+    }
+
+    if (e.kind === 'licker') {
+      if (e.wind) {
+        // la lengua sale en la dirección fijada al empezar: da tiempo a apartarse
+        e.wind.t -= dt
+        e.mv = lerp(e.mv, 0, 0.3)
+        e.face += angDiff(e.face, e.cdir) * Math.min(1, dt * 12)
+        if (e.wind.t <= 0) {
+          e.wind = null
+          e.pulse = 0.25
+          if (d < 98 + pr && Math.abs(angDiff(e.cdir, want)) < 0.6 && !ridingFast) this.hurtPlayer(def.melee, e.x, e.y, 70, 'licker')
+          beep(260, 0.07, { type: 'sawtooth', vol: 0.05 })
+        }
+        return true
+      }
+      e.face += angDiff(e.face, want) * turn
+      const fl = d > 150 ? ((e.id % 3) - 1) * 0.35 : 0
+      const sx = ux - uy * fl
+      const sy = uy + ux * fl
+      const sl = Math.hypot(sx, sy) || 1
+      if (d > e.r + pr + 46) this.steer(e, sx / sl, sy / sl, def.speed * e.speedMul, dt, d)
+      else e.mv = lerp(e.mv, 0, 0.3)
+      if (d < 84 + pr && e.atk <= 0) {
+        e.wind = { type: 'lick', t: 0.45 }
+        e.cdir = want
+        e.atk = def.meleeCd * rnd(0.9, 1.2) * this.diff.attack
+      }
+      return true
+    }
+
+    if (e.kind === 'rock') {
+      const armored = e.armor > 0
+      e.face += angDiff(e.face, want) * Math.min(1, dt * 5)
+      if (d > e.r + pr + 3) this.steer(e, ux, uy, def.speed * (armored ? 1 : 1.7) * e.speedMul, dt, d)
+      else e.mv = lerp(e.mv, 0, 0.3)
+      if (d < e.r + pr + 9 && e.atk <= 0 && !ridingFast) {
+        this.hurtPlayer(armored ? def.melee : 6, e.x, e.y, armored ? 80 : 40, 'rock')
+        e.atk = def.meleeCd
+      }
+      return true
+    }
+
+    if (e.kind !== 'colossus') return false
+
+    // ---- Coloso de roca: ácido en abanico, lengua telegrafiada y embestida telegrafiada ----
+    e.t -= dt
+    const frac = e.hp / e.maxHp
+    if (e.wind) {
+      const type = e.wind.type
+      e.wind.t -= dt
+      e.mv = lerp(e.mv, 0, 0.2)
+      if (type === 'lick') e.face += angDiff(e.face, e.cdir) * Math.min(1, dt * 10)
+      else if (type === 'charge') e.face += angDiff(e.face, want) * Math.min(1, dt * 3)
+      else if (type !== 'stun') e.face += angDiff(e.face, want) * turn
+      if (e.wind.t <= 0) {
+        e.wind = null
+        if (type === 'acid') {
+          for (let i = 0; i < 7; i++) {
+            const a = want + (i - 3) * 0.13
+            this.spawnEProj(e.x + Math.cos(a) * e.r, e.y + Math.sin(a) * e.r, a, 320, 13, 'colossus', 0x9dff3a, 9)
+          }
+          sfx.roar()
+        } else if (type === 'lick') {
+          e.pulse = 0.3
+          this.shake = Math.max(this.shake, 10)
+          sfx.slam()
+          if (d < COLOSSUS_LICK + pr && Math.abs(angDiff(e.cdir, want)) < 0.32) this.hurtPlayer(34, e.x, e.y, 120, 'colossus')
+        } else if (type === 'charge') {
+          e.charging = 0.8
+          e.cdir = want
+          sfx.roar()
+        }
+      }
+      return true
+    }
+    if (e.charging > 0) {
+      e.charging -= dt
+      e.face = e.cdir
+      const hit = moveCircle(this.grid, this.extra, e, Math.cos(e.cdir) * 540 * dt, Math.sin(e.cdir) * 540 * dt)
+      e.mv = 1
+      if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + pr) {
+        this.hurtPlayer(44, e.x, e.y, 130, 'colossus')
+        e.charging = 0
+        e.wind = { type: 'stun', t: 0.8 }
+      } else if (hit) {
+        e.charging = 0
+        e.wind = { type: 'stun', t: 1.4 }
+        this.shake = 16
+        sfx.slam()
+        this.fx.burst(e.x + Math.cos(e.cdir) * e.r, e.y + Math.sin(e.cdir) * e.r, 22, 0xc8a080, 240, 0.5, 4, 30)
+      }
+      return true
+    }
+    e.face += angDiff(e.face, want) * Math.min(1, dt * 5)
+    if (d > e.r + pr + 30) this.steer(e, ux, uy, def.speed * (1 + (1 - frac) * 0.45), dt, d)
+    else e.mv = lerp(e.mv, 0, 0.3)
+    const los = losClear(this.grid, this.extra, e.x, e.y, p.x, p.y)
+    if (d < COLOSSUS_LICK + pr - 30 && e.t <= 0) {
+      e.wind = { type: 'lick', t: 1 }
+      e.cdir = want
+      e.t = 3.2 * this.diff.attack
+    } else if (los && d < 900 && e.cd <= 0) {
+      e.wind = { type: 'acid', t: 0.8 }
+      e.cd = 4.2 * this.diff.attack
+    } else if (los && d > 280 && d < 800 && e.atk <= 0) {
+      e.wind = { type: 'charge', t: 0.9 }
+      e.atk = 7 * this.diff.attack
+    }
+    // custodia la entrada: no se aleja del portón
+    const g = this.gatePos
+    const gd = Math.hypot(e.x - g.x, e.y - g.y)
+    if (gd > 1150) {
+      e.x = g.x + ((e.x - g.x) / gd) * 1150
+      e.y = g.y + ((e.y - g.y) / gd) * 1150
+    }
+    return true
+  }
+
+  // ---------- Tormenta de arena de Bershna ----------
+  private buildStorm(): void {
+    const n = 1100
+    this.stormPos = new Float32Array(n * 3)
+    for (let i = 0; i < n; i++) this.stormPos.set([rnd(-700, 700), rnd(3, 300), rnd(-700, 700)], i * 3)
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(this.stormPos, 3))
+    this.storm = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xf4b48a, size: 3, transparent: true, opacity: 0.5, depthWrite: false, sizeAttenuation: true }))
+    this.storm.frustumCulled = false
+    this.storm.visible = false
+    this.scene.add(this.storm)
+  }
+
+  /** Ráfagas: la niebla de arena se cierra y se abre, y los granos cruzan la pantalla con el viento. */
+  private updateStorm(dt: number): void {
+    const gust = clamp(0.55 + 0.4 * Math.sin(this.t * 0.17) + 0.2 * Math.sin(this.t * 0.71 + 1), 0, 1)
+    const fog = this.scene.fog as THREE.Fog
+    fog.near = lerp(640, 230, gust)
+    fog.far = lerp(3400, 1450, gust)
+    this.storm.visible = !this.indoor
+    if (this.indoor) return
+    const cam = this.camera.position
+    const speed = 320 + gust * 560
+    const vx = Math.cos(0.4) * speed * dt
+    const vz = Math.sin(0.4) * speed * dt
+    const a = this.stormPos
+    for (let i = 0; i < a.length; i += 3) {
+      let x = a[i] + vx
+      let z = a[i + 2] + vz
+      let y = a[i + 1] + Math.sin(this.t * 3 + i) * 14 * dt
+      if (x - cam.x > 700) x -= 1400
+      else if (x - cam.x < -700) x += 1400
+      if (z - cam.z > 700) z -= 1400
+      else if (z - cam.z < -700) z += 1400
+      if (y - cam.y > 190) y -= 330
+      else if (y - cam.y < -140) y += 330
+      a[i] = x
+      a[i + 1] = Math.max(2, y)
+      a[i + 2] = z
+    }
+    ;(this.storm.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true
+    ;(this.storm.material as THREE.PointsMaterial).opacity = 0.28 + gust * 0.45
+  }
+
+  // ---------- Mejoras de vehículo ----------
+  private makeUpgradeMesh(id: UpgradeId): THREE.Group {
+    const g = new THREE.Group()
+    const steel = 0x8c919c
+    if (id === 'spikes') {
+      g.add(box(8, 8, 44, 0x3a3f49, 0, 10, 0))
+      for (let i = -2; i <= 2; i++) {
+        const c = new THREE.Mesh(new THREE.ConeGeometry(4.2, 16, 6), new THREE.MeshStandardMaterial({ color: 0xd4d7dc, metalness: 0.7, roughness: 0.3 }))
+        c.rotation.z = -Math.PI / 2
+        c.position.set(11, 10, i * 9)
+        g.add(c)
+      }
+    } else if (id === 'tires') {
+      const tire = cyl(15, 15, 13, 0x15161a, 18)
+      tire.rotation.x = Math.PI / 2
+      tire.position.y = 16
+      const hub = cyl(6, 6, 14, 0xffc61a, 10)
+      hub.rotation.x = Math.PI / 2
+      hub.position.y = 16
+      g.add(tire, hub)
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2
+        const pad = box(4, 3, 14, 0xd9482b, Math.cos(a) * 15.6, 16 + Math.sin(a) * 15.6, 0, false)
+        pad.rotation.z = a + Math.PI / 2
+        g.add(pad)
+      }
+    } else if (id === 'engine') {
+      g.add(box(26, 16, 20, 0x5d6472, 0, 12, 0))
+      g.add(box(18, 5, 14, 0xd9482b, 0, 23, 0))
+      for (const s of [-1, 1]) {
+        const pipe = cyl(3, 3, 22, steel, 8)
+        pipe.rotation.z = Math.PI / 2 - 0.5
+        pipe.position.set(-16, 20, s * 6)
+        g.add(pipe)
+      }
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(5, 10, 8), basic(0x57f2ff))
+      glow.position.set(0, 27, 0)
+      g.add(glow)
+    } else {
+      const plate = box(5, 26, 34, 0x3f4551, 0, 17, 0)
+      g.add(plate)
+      g.add(box(6, 4, 36, 0xffc61a, 0, 30, 0))
+      for (const z of [-11, 11]) for (const y of [9, 24]) g.add(box(7, 3, 3, steel, 0, y, z, false))
+    }
+    return g
+  }
+
+  /** Piezas que aparecen en los vehículos de Bershna al conseguir cada mejora. */
+  private addVehicleExtras(mesh: THREE.Group, kind: VehicleKind): void {
+    const moto = kind === 'moto'
+    const steel = new THREE.MeshStandardMaterial({ color: 0xd4d7dc, metalness: 0.7, roughness: 0.3 })
+    const spikes = new THREE.Group()
+    spikes.add(box(5, 7, moto ? 14 : 38, 0x3a3f49, moto ? 39 : 46, moto ? 24 : 16, 0))
+    for (const z of moto ? [-4, 4] : [-15, -7.5, 0, 7.5, 15]) {
+      const c = new THREE.Mesh(new THREE.ConeGeometry(3.4, 14, 6), steel)
+      c.rotation.z = -Math.PI / 2
+      c.position.set((moto ? 39 : 46) + 9, moto ? 24 : 16, z)
+      spikes.add(c)
+    }
+    const armor = new THREE.Group()
+    for (const s of [-1, 1]) {
+      armor.add(box(moto ? 22 : 46, moto ? 9 : 13, 2.5, 0x3f4551, moto ? 2 : 0, moto ? 19 : 19, s * (moto ? 6 : 19.5)))
+      armor.add(box(moto ? 22 : 46, 2, 3, 0xffc61a, moto ? 2 : 0, moto ? 24.5 : 26.5, s * (moto ? 6 : 19.5), false))
+    }
+    const engine = new THREE.Group()
+    for (const s of moto ? [-1] : [-1, 1]) {
+      const pipe = cyl(2.4, 3, 20, 0x8c919c, 8)
+      pipe.rotation.z = Math.PI / 2 - 0.35
+      pipe.position.set(moto ? -30 : -40, moto ? 18 : 24, s * (moto ? 6 : 9))
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(2.6, 8, 6), basic(0x57f2ff))
+      tip.position.set(moto ? -40 : -50, moto ? 21.5 : 27.5, s * (moto ? 6 : 9))
+      engine.add(pipe, tip)
+    }
+    const tires = new THREE.Group()
+    for (const w of mesh.userData.wheels as THREE.Group[]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(moto ? 12.4 : 11.6, 1.7, 6, 18), new THREE.MeshStandardMaterial({ color: 0xffc61a, roughness: 0.5 }))
+      ring.visible = false
+      w.add(ring)
+      tires.children.push(ring)
+    }
+    for (const gr of [spikes, armor, engine]) {
+      gr.visible = false
+      mesh.add(gr)
+    }
+    mesh.userData.extras = { spikes, armor, engine, tires: tires.children }
+  }
+
+  private refreshUpgrades(): void {
+    this.hud.setUpgrades(this.level === 2 ? UPGRADES.filter(u => this.upg[u.id]).map(u => u.short) : [])
+    for (const v of this.vehicles) {
+      const ex = v.mesh.userData.extras as { spikes: THREE.Group; armor: THREE.Group; engine: THREE.Group; tires: THREE.Object3D[] } | undefined
+      if (!ex) continue
+      ex.spikes.visible = this.upg.spikes
+      ex.armor.visible = this.upg.armor
+      ex.engine.visible = this.upg.engine
+      for (const t of ex.tires) t.visible = this.upg.tires
+    }
+  }
+
+  private resetUpgrades(): void {
+    this.upg = { spikes: false, tires: false, engine: false, armor: false }
+    for (const u of this.upgradeItems) {
+      u.taken = false
+      u.mesh.visible = u.halo.visible = true
+    }
+    this.refreshUpgrades()
+  }
+
+  private updateUpgrades(): void {
+    const p = this.p
+    const reach = this.buggy.riding ? 64 : 40
+    for (const u of this.upgradeItems) {
+      if (u.taken) continue
+      u.mesh.position.y = 10 + Math.sin(this.t * 2.5 + u.ph) * 4
+      u.mesh.rotation.y = this.t * 1.4 + u.ph
+      u.halo.scale.setScalar(1 + Math.sin(this.t * 4 + u.ph) * 0.15)
+      if (Math.hypot(p.x - u.x, p.y - u.y) > reach) continue
+      u.taken = true
+      u.mesh.visible = u.halo.visible = false
+      this.upg[u.id] = true
+      const def = UPGRADES.find(d => d.id === u.id)!
+      sfx.lego()
+      this.fx.burst(u.x, u.y, 26, 0x57f2ff, 220, 0.8, 3.5, 20)
+      this.hud.perk('¡MEJORA DE VEHÍCULO!', `${def.name}: ${def.desc}`)
+      this.refreshUpgrades()
+    }
+  }
+
+  /** Final de la experiencia: el cohete deja Bershna rumbo a Debhor. */
+  private finale(): void {
+    this.mode = 'end'
+    this.hud.fade(false)
+    this.hud.showHud(false)
+    this.hud.updateBuggyMarker(0, 0, 0, false)
+    this.input.exitLock()
+    const totalSec = Math.floor(this.runTime + (this.spaceStats?.elapsed ?? 0))
+    const mm = Math.floor(totalSec / 60)
+    const ss = (totalSec % 60).toString().padStart(2, '0')
+    this.hud.endScreen([
+      `Tiempo total <b>${mm}:${ss}</b>`,
+      `Destino <b>Planeta Debhor</b>`,
+      `Aliens derrotados <b>${this.stats.kills}</b>`,
+      `Meteoritos destruidos <b>${this.spaceStats?.asteroidsDestroyed ?? 0}</b>`,
+      `Caídas <b>${this.stats.deaths}</b>`,
+      `Piezas LEGO <b>${this.stats.lego}/${LEGO_TOTAL}</b>`,
+    ])
+    sfx.win()
   }
 
   // ================= Proyectiles =================
@@ -2956,7 +3877,11 @@ export class Game {
     this.sun.intensity = lerp(0.95, 0.1, dark)
     this.torch.intensity = 2.4 * dark
     this.torch.position.set(p.x, 70, p.y)
-      ; (this.scene.background as THREE.Color).setRGB(0.012 * (1 - dark * 0.8), 0.02 * (1 - dark * 0.8), 0.1 * (1 - dark * 0.8))
+    if (this.level === 2 && this.indoor) {
+      this.torch.intensity = 2.1
+      this.torch.position.set(p.x, this.pz + 84, p.y)
+    }
+      ; (this.scene.background as THREE.Color).copy(this.bg).multiplyScalar(1 - dark * 0.8)
       ; (this.scene.fog as THREE.Fog).color.copy(this.scene.background as THREE.Color)
       ; (W.stars.material as THREE.PointsMaterial).opacity = 1 - dark * 0.9
       ; ((W.planet.material as THREE.MeshBasicMaterial).color).setScalar(1 - dark * 0.9)
@@ -3169,10 +4094,15 @@ export class Game {
     for (const k of WEAPON_ORDER) rig.guns[k].visible = p.owned[k] && p.weapon === k
 
     // buggy
-    const bg = this.buggyM.userData as { wheels: THREE.Group[] }
-    this.buggyM.position.set(b.x, riding ? Math.sin(this.t * 30) * Math.min(0.8, Math.abs(b.v) / 400) : 0, b.y)
-    this.buggyM.rotation.y = -b.h
-    bg.wheels.forEach(w => (w.rotation.z = -b.spin))
+    for (const v of this.vehicles) {
+      const on = v === b && riding
+      v.mesh.position.set(v.x, on ? Math.sin(this.t * 30) * Math.min(0.8, Math.abs(v.v) / 400) : 0, v.y)
+      v.mesh.rotation.y = -v.h
+      ;(v.mesh.userData.wheels as THREE.Group[]).forEach(w => (w.rotation.z = -v.spin))
+      // la ametralladora del buggy artillado sigue a la mira
+      const turret = v.mesh.userData.turret as THREE.Group | undefined
+      if (turret) turret.rotation.y = on ? -(this.yaw - v.h) : 0
+    }
     this.arrowM.visible = !riding && this.flags.impDead && !this.flags.boarded
     this.arrowM.position.set(b.x, 70 + Math.sin(this.t * 5) * 5, b.y)
 
@@ -3278,6 +4208,8 @@ export class Game {
 
     // cámara
     this.updateCamera(dt, ending)
+    this.b.sky.position.copy(this.camera.position)
+    if (this.level === 2) this.updateStorm(dt)
 
     // HUD
     this.hud.setScope(inScope)
@@ -3287,8 +4219,8 @@ export class Game {
       const anyGun = p.owned.pistol || p.owned.rifle || p.owned.shotgun || p.owned.sniper
       this.hud.setWeapons(p.owned, p.ammo, p.weapon, anyGun, p.hasGrenade, p.grenades, this.perkInfinite)
       this.hud.setStamina(p.stamina, this.staminaMax, p.exhausted, this.perkStamina, this.perkFreeRun)
-      const boss = this.enemies.find(e => e.kind === 'boss' && e.state === 'chase')
-      if (this.mode === 'play' && boss) this.hud.boss('Jefe Impostor', boss.hp / boss.maxHp)
+      const boss = this.enemies.find(e => (e.kind === 'boss' || e.kind === 'colossus') && e.state === 'chase')
+      if (this.mode === 'play' && boss) this.hud.boss(ALIENS[boss.kind].label, boss.hp / boss.maxHp)
       else if (this.mode === 'play' && im.state === 'chase') this.hud.boss('Impostor', im.hp / IMPOSTOR_HP)
       else this.hud.boss(null)
       this.hud.radar(p.x, p.y, this.yaw, this.collectRadar())
@@ -3323,9 +4255,26 @@ export class Game {
       body.rotation.z = -0.04 - mv * 0.08
       body.position.y = Math.abs(Math.sin(e.ph)) * def.height * 0.05 * mv
       let sc = 1 + Math.sin(e.ph * 0.5) * 0.012
-      if (e.pulse > 0 && e.kind !== 'boss') sc += Math.sin((e.pulse / 0.25) * Math.PI) * 0.25
+      if (e.pulse > 0 && e.kind !== 'boss' && e.kind !== 'colossus') sc += Math.sin((e.pulse / 0.25) * Math.PI) * 0.25
       if (e.wind && e.wind.type !== 'stun') sc += Math.sin(this.t * 40) * 0.05
       body.scale.setScalar(sc)
+      const rig = body.userData.rig as Alien2Rig | undefined
+      if (rig) {
+        if (rig.armor) rig.armor.visible = e.kind === 'colossus' || e.armor > 0
+        if (rig.tongue && rig.tip) {
+          // la lengua asoma poco hasta el final del aviso y entonces sale disparada
+          const big = e.kind === 'colossus'
+          const rest = def.height * 0.1
+          const reach = big ? COLOSSUS_LICK : 92
+          let len = rest
+          if (e.wind?.type === 'lick') {
+            const k = 1 - e.wind.t / (big ? 1 : 0.45)
+            len = k < 0.8 ? rest * (1 + k) : lerp(rest * 1.8, reach, (k - 0.8) / 0.2)
+          } else if (e.pulse > 0 && (big || e.kind === 'licker')) len = reach
+          rig.tongue.scale.x = len
+          rig.tip.position.x = (rig.mouthX ?? 0) + len
+        }
+      }
       const want = e.flash > 0
       if (want !== e.flashOn) {
         e.flashOn = want
@@ -3339,10 +4288,11 @@ export class Game {
         ud.ring.scale.setScalar(R)
           ; (ud.ring.material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(this.t * 30) * 0.2
       }
-      if (e.kind === 'boss' && e.wind?.type === 'charge') {
+      if ((e.kind === 'boss' || e.kind === 'colossus') && (e.wind?.type === 'charge' || e.wind?.type === 'lick')) {
         bossLine = true
-        const a = Math.atan2(p.y - e.y, p.x - e.x)
-        const L = 640
+        const lick = e.wind.type === 'lick'
+        const a = lick ? e.cdir : Math.atan2(p.y - e.y, p.x - e.x)
+        const L = lick ? COLOSSUS_LICK + 50 : 640
         this.chargeLine.visible = true
         this.chargeLine.scale.set(L, 0.6, 5)
         this.chargeLine.position.set(e.x + Math.cos(a) * L / 2, 1.2, e.y + Math.sin(a) * L / 2)
@@ -3375,10 +4325,10 @@ export class Game {
       cam.updateProjectionMatrix()
     }
     if (ending) {
-      const sp = this.shipM.position
-      const tx = SHIP.x - 300
+      const sp = this.shipMesh.position
+      const tx = this.shipPos.x - 300
       const ty = 130 + sp.y * 0.7
-      const tz = SHIP.y + 260
+      const tz = this.shipPos.y + 260
       if (!this.camInit) { this.camPos.set(tx, ty, tz); this.camInit = true }
       const k = 1 - Math.pow(0.04, dt)
       this.camPos.lerp(this.tmpV.set(tx, ty, tz), k)
@@ -3443,6 +4393,15 @@ export class Game {
       if (tRoof >= 0 && tRoof < bestT) bestT = tRoof
     }
 
+    if (this.level === 2) {
+      for (const rf of this.b.roofs) {
+        const lim = rf.top - 14
+        if (px < rf.x || px > rf.x + rf.w || pz < rf.y || pz > rf.y + rf.h || lim <= pivY || ty <= lim) continue
+        const tRoof = (lim - pivY) / (ty - pivY)
+        if (tRoof >= 0 && tRoof < bestT) bestT = tRoof
+      }
+    }
+
     // Suelo / terreno: la cámara NUNCA traspasa el piso al mirar hacia arriba
     const minCamY = (ride ? 0 : this.world.heightAt(tx, tz)) + 14
     if (ty < minCamY && pivY > minCamY) {
@@ -3491,16 +4450,17 @@ export class Game {
     for (const e of this.enemies) {
       if (e.state === 'dead') continue
       const d = Math.hypot(e.x - p.x, e.y - p.y)
-      if (e.kind === 'boss') { dots.push({ x: e.x, y: e.y, kind: 'boss' }); continue }
+      if (e.kind === 'boss' || e.kind === 'colossus') { dots.push({ x: e.x, y: e.y, kind: 'boss' }); continue }
       if (d < 1000 && (e.state === 'chase' || d < 520)) dots.push({ x: e.x, y: e.y, kind: 'enemy' })
     }
     const im = this.imp
     if (im.state === 'chase' || im.state === 'forming') dots.push({ x: im.x, y: im.y, kind: 'enemy' })
     for (const s of this.world.sites) dots.push({ x: s.x + s.w / 2, y: s.y + s.d / 2, kind: 'site' })
-    for (const b of this.beacons) dots.push({ x: b.x, y: b.y, kind: 'beacon' })
-    for (const l of this.legos) if (!l.taken) dots.push({ x: l.x, y: l.y, kind: 'lego' })
+    for (const b of this.beacons) if ((b.lv ?? 1) === this.level) dots.push({ x: b.x, y: b.y, kind: 'beacon' })
+    if (this.level === 1) for (const l of this.legos) if (!l.taken) dots.push({ x: l.x, y: l.y, kind: 'lego' })
     for (const k of this.pickups) if (!k.taken && Math.hypot(k.x - p.x, k.y - p.y) < 300) dots.push({ x: k.x, y: k.y, kind: 'pickup' })
-    if (this.flags.boarded) dots.push({ x: SHIP.x, y: SHIP.y, kind: 'ship' })
+    if (this.flags.boarded) dots.push({ x: this.shipPos.x, y: this.shipPos.y, kind: 'ship' })
+    if (this.level === 2) for (const u of this.upgradeItems) if (!u.taken) dots.push({ x: u.x, y: u.y, kind: 'lego' })
     if (!this.buggy.riding) dots.push({ x: this.buggy.x, y: this.buggy.y, kind: 'buggy' })
     return dots
   }
@@ -3518,4 +4478,8 @@ const DEAD_TEXT: Record<DeathCause, string> = {
   fence: 'Te desintegraste al cruzar una valla láser.',
   plasma: 'Una trampa de plasma te frió el traje.',
   grenade: 'Tu propia granada de plasma te hizo volar en pedazos.',
+  acid: 'El ácido de un escupidor te disolvió el traje.',
+  licker: 'Una lengua afilada te atravesó.',
+  rock: 'Un acorazado de roca te aplastó.',
+  colossus: 'El coloso de roca te cerró el paso para siempre.',
 }
