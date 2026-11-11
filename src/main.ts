@@ -17,7 +17,7 @@ let game: Game
 
 try {
   game = new Game(canvas, input, hud)
-  ;(window as any).__GAME__ = game
+    ; (window as any).__GAME__ = game
 } catch (e) {
   console.error(e)
   $('load-hint')!.textContent = 'Este navegador no puede mostrar gráficos 3D (WebGL).'
@@ -520,7 +520,7 @@ loadModels((d, t) => hud.loadHint(`Preparando el planeta… ${d}/${t}`))
   .then(failed => {
     game.failedModels = failed
     game.resetRun()
-    hud.loadHint(failed.length ? 'Modelos listos (con respaldos locales).' : 'Todo listo. ¡Buena suerte, astronauta!')
+    hud.loadHint(failed.length ? 'Modelos listos (con respaldos locales).' : '¡Buena suerte, astronauta!')
     hud.setPlayButton(true, 'JUGAR')
   })
   .catch(e => {

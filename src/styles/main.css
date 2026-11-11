@@ -54,7 +54,7 @@ body {
   overflow: hidden;
   background: #050818;
   color: #fff;
-  font-family: 'Legothick', 'Barlow Semi Condensed', system-ui, sans-serif;
+  font-family: 'Audiowide', system-ui, sans-serif;
   -webkit-user-select: none;
   user-select: none;
   touch-action: none;
@@ -82,7 +82,11 @@ body {
   display: none !important;
 }
 
-button {
+button,
+input,
+select,
+textarea,
+kbd {
   font-family: inherit;
 }
 
@@ -99,7 +103,6 @@ button {
 }
 
 .bangers,
-.logo,
 #hp .lbl,
 #stam .lbl,
 #lego,
@@ -113,7 +116,7 @@ button {
 h1,
 h2,
 .btn {
-  font-family: 'Legothick', 'Audiowide', 'Bangers', Impact, sans-serif;
+  font-family: 'Audiowide', Impact, sans-serif;
   letter-spacing: 0.04em;
 }
 
@@ -172,7 +175,7 @@ h2,
   inset: 0;
   display: grid;
   place-items: center;
-  font-family: 'Audiowide', 'Bangers', sans-serif;
+  font-family: 'Audiowide', sans-serif;
   font-size: 14px;
   color: #fff;
   text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink);
@@ -619,7 +622,7 @@ h2,
 }
 
 #radio .tag {
-  font-family: 'Audiowide', 'Bangers', sans-serif;
+  font-family: 'Audiowide', sans-serif;
   background: var(--cyan);
   color: var(--ink);
   padding: 2px 8px;
@@ -656,7 +659,7 @@ h2,
 }
 
 #toast-title {
-  font-family: 'Audiowide', 'Bangers', sans-serif;
+  font-family: 'Audiowide', sans-serif;
   font-size: 16px;
   color: var(--yellow);
   margin: 2px 0;
@@ -794,7 +797,7 @@ h2,
   border-radius: 12px;
   padding: 8px 18px;
   color: #fff;
-  font-family: 'Audiowide', 'Bangers', Impact, sans-serif;
+  font-family: 'Audiowide', sans-serif;
   font-size: 15px;
   letter-spacing: 0.04em;
   pointer-events: none;
@@ -849,6 +852,7 @@ h2,
 }
 
 .logo {
+  font-family: 'Legothick', 'Audiowide', sans-serif;
   margin: 0;
   font-size: clamp(56px, 11vw, 114px);
   line-height: 0.95;
@@ -1045,20 +1049,21 @@ kbd {
   padding: 10px 16px !important;
 }
 
-.diff-btn b {
-  font-family: 'Audiowide', 'Bangers', sans-serif;
+.diff-btn b,
+.diff-btn span {
+  font-family: 'Audiowide', sans-serif;
   font-size: 22px;
   letter-spacing: 0.05em;
 }
 
 .diff-btn small {
-  font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  opacity: 0.85;
+  font-family: 'Audiowide', sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0.9;
   background: var(--txtbg);
   border-radius: 5px;
-  padding: 1px 8px;
+  padding: 3px 8px;
 }
 
 .diff-btn.inf {
@@ -1117,7 +1122,7 @@ kbd {
 }
 
 .ach-top b {
-  font-family: 'Audiowide', 'Bangers', sans-serif;
+  font-family: 'Audiowide', sans-serif;
   font-size: 15px;
   color: var(--ink);
   background: var(--txtbg);
@@ -1126,7 +1131,7 @@ kbd {
 }
 
 .ach-top span {
-  font-family: 'Audiowide', 'Bangers', sans-serif;
+  font-family: 'Audiowide', sans-serif;
   font-size: 13px;
   color: #166b36;
   background: var(--txtbg);
@@ -1191,7 +1196,7 @@ kbd {
 }
 
 .setting-row label {
-  font-family: 'Audiowide', 'Bangers', Impact, sans-serif;
+  font-family: 'Audiowide', Impact, sans-serif;
   letter-spacing: 0.03em;
   font-size: 15px;
   color: var(--ink);
@@ -1217,7 +1222,7 @@ kbd {
 .setting-val {
   min-width: 44px;
   text-align: right;
-  font-family: 'Audiowide', 'Bangers', Impact, sans-serif;
+  font-family: 'Audiowide', Impact, sans-serif;
   font-size: 16px;
   color: var(--ink);
 }
@@ -1225,8 +1230,8 @@ kbd {
 .sens-box {
   width: 72px;
   padding: 4px 8px;
-  font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
-  font-size: 17px;
+  font-family: 'Audiowide', sans-serif;
+  font-size: 16px;
   font-weight: 600;
   text-align: right;
   color: var(--ink);
@@ -1246,8 +1251,8 @@ kbd {
 .sel-box {
   flex: 1;
   padding: 5px 10px;
-  font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
-  font-size: 17px;
+  font-family: 'Audiowide', sans-serif;
+  font-size: 16px;
   font-weight: 600;
   color: var(--ink);
   background: #fff;
@@ -1266,7 +1271,7 @@ kbd {
 .q-btn {
   flex: 1;
   padding: 7px 4px;
-  font-family: 'Audiowide', 'Bangers', Impact, sans-serif;
+  font-family: 'Audiowide', Impact, sans-serif;
   font-size: 13px;
   color: var(--ink);
   background: #fff;
@@ -1350,7 +1355,7 @@ kbd {
 .tbtn {
   position: absolute;
   pointer-events: auto;
-  font-family: 'Audiowide', 'Bangers', sans-serif;
+  font-family: 'Audiowide', sans-serif;
   font-size: 16px;
   border: 3px solid var(--ink);
   border-radius: 50%;
@@ -1619,7 +1624,7 @@ kbd {
   border-radius: 8px;
   padding: 4px 10px;
   box-shadow: 0 4px 14px rgba(87, 242, 255, 0.4), 0 0 0 1px var(--ink);
-  font-family: 'Legothick', 'Audiowide', sans-serif;
+  font-family: 'Audiowide', sans-serif;
 }
 
 .buggy-ico {
@@ -1659,7 +1664,7 @@ kbd {
   inset: 0;
   pointer-events: none;
   z-index: 6;
-  font-family: 'Legothick', 'Barlow Semi Condensed', sans-serif;
+  font-family: 'Audiowide', sans-serif;
 }
 
 #space-top {

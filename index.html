@@ -1,246 +1,285 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#050816" />
-    <title>Varado</title>
-    <meta name="description" content="Astronauta aislado en un planeta infestado por aliens estilo Among Us. Encuentra las piedras ignífugas, repara el cohete y escapa. Aventura 3D de supervivencia con estética LEGO." />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preload" href="/fonts/Legothick.ttf" as="font" type="font/ttf" crossorigin />
-    <link rel="preload" href="/fonts/Audiowide-Regular.ttf" as="font" type="font/ttf" crossorigin />
-    <link rel="preload" href="/fonts/Bangers-Regular.ttf" as="font" type="font/ttf" crossorigin />
-  </head>
-  <body>
-    <canvas id="game"></canvas>
-    <canvas id="menu-bg"></canvas>
-    <div id="wake-vignette" class="hidden">
-      <div class="wake-lid wake-lid-top"></div>
-      <div class="wake-lid wake-lid-bottom"></div>
-      <div class="wake-blur"></div>
-    </div>
 
-    <div id="hud" class="hidden">
-      <div id="hp">
-        <div class="lbl">VIDA</div>
-        <div class="bar"><div id="hpfill"></div><div id="hpnum">100</div></div>
-      </div>
-      <div id="stam">
-        <div class="lbl">ESTAMINA</div>
-        <div class="bar"><div id="stfill"></div></div>
-      </div>
-      <div id="lego" title="Piezas curiosas de LEGO"><i class="brick"></i><b id="legoN">0</b><span>/</span><span id="legoT">14</span></div>
-      <div id="fuel" title="Piedras ignífugas (combustible del cohete)"><i class="gem"></i><b id="fuelN">0</b><span>/</span><span id="fuelT">3</span></div>
-      <div id="objective"></div>
-      <div id="boss" class="hidden"><div class="nm" id="bossName"></div><div class="bar"><div id="bossFill"></div></div></div>
-      <canvas id="radar" width="168" height="168"></canvas>
-      <div id="weapons"></div>
-      <div id="cross"></div>
-      <div id="scope" class="hidden"><div class="reticle"></div></div>
-      <div id="prompt"></div>
-      <div id="control-hint" class="hidden"></div>
-      <div id="caption"></div>
-      <div id="radio"><span class="tag">TÚ</span><span id="radioText"></span></div>
-      <div id="toast"><div class="toast-head">¡LOGRO DESBLOQUEADO!</div><b id="toastTitle"></b><span id="toastDesc"></span></div>
-      <div id="hurt"></div>
-      <div id="fade"></div>
-      <div id="buggy-marker" class="hidden">
-        <div class="buggy-marker-body">
-          <span class="buggy-ico">🚙</span>
-          <span class="buggy-txt">BUGGY</span>
-          <span class="buggy-dst" id="buggyDstNum">0m</span>
-        </div>
-        <div class="buggy-arrow"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#050816" />
+  <title>Varado</title>
+  <meta name="description"
+    content="Astronauta aislado en un planeta infestado por aliens estilo Among Us. Encuentra las piedras ignífugas, repara el cohete y escapa. Aventura 3D de supervivencia con estética LEGO." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preload" href="/fonts/Legothick.ttf" as="font" type="font/ttf" crossorigin />
+  <link rel="preload" href="/fonts/Audiowide-Regular.ttf" as="font" type="font/ttf" crossorigin />
+  <link rel="preload" href="/fonts/Bangers-Regular.ttf" as="font" type="font/ttf" crossorigin />
+</head>
+
+<body>
+  <canvas id="game"></canvas>
+  <canvas id="menu-bg"></canvas>
+  <div id="wake-vignette" class="hidden">
+    <div class="wake-lid wake-lid-top"></div>
+    <div class="wake-lid wake-lid-bottom"></div>
+    <div class="wake-blur"></div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="hp">
+      <div class="lbl">VIDA</div>
+      <div class="bar">
+        <div id="hpfill"></div>
+        <div id="hpnum">100</div>
       </div>
     </div>
+    <div id="stam">
+      <div class="lbl">ESTAMINA</div>
+      <div class="bar">
+        <div id="stfill"></div>
+      </div>
+    </div>
+    <div id="lego" title="Piezas curiosas de LEGO"><i class="brick"></i><b id="legoN">0</b><span>/</span><span
+        id="legoT">14</span></div>
+    <div id="fuel" title="Piedras ignífugas (combustible del cohete)"><i class="gem"></i><b
+        id="fuelN">0</b><span>/</span><span id="fuelT">3</span></div>
+    <div id="objective"></div>
+    <div id="boss" class="hidden">
+      <div class="nm" id="bossName"></div>
+      <div class="bar">
+        <div id="bossFill"></div>
+      </div>
+    </div>
+    <canvas id="radar" width="168" height="168"></canvas>
+    <div id="weapons"></div>
+    <div id="cross"></div>
+    <div id="scope" class="hidden">
+      <div class="reticle"></div>
+    </div>
+    <div id="prompt"></div>
+    <div id="control-hint" class="hidden"></div>
+    <div id="caption"></div>
+    <div id="radio"><span class="tag">TÚ</span><span id="radioText"></span></div>
+    <div id="toast">
+      <div class="toast-head">¡LOGRO DESBLOQUEADO!</div><b id="toastTitle"></b><span id="toastDesc"></span>
+    </div>
+    <div id="hurt"></div>
+    <div id="fade"></div>
+    <div id="buggy-marker" class="hidden">
+      <div class="buggy-marker-body">
+        <span class="buggy-ico">🚙</span>
+        <span class="buggy-txt">BUGGY</span>
+        <span class="buggy-dst" id="buggyDstNum">0m</span>
+      </div>
+      <div class="buggy-arrow"></div>
+    </div>
+  </div>
 
-    <div id="space-hud" class="hidden">
-      <div id="space-top">
-        <div class="space-card" id="space-hull">
-          <div class="lbl">CASCO DEL COHETE</div>
-          <div class="bar"><div id="spaceHullFill"></div><div id="spaceHullNum">100%</div></div>
-        </div>
-        <div class="space-card" id="space-score">
-          <div class="lbl">METEORITOS</div>
-          <b id="spaceScoreNum">0</b>
+  <div id="space-hud" class="hidden">
+    <div id="space-top">
+      <div class="space-card" id="space-hull">
+        <div class="lbl">CASCO DEL COHETE</div>
+        <div class="bar">
+          <div id="spaceHullFill"></div>
+          <div id="spaceHullNum">100%</div>
         </div>
       </div>
-      <div id="space-progress-wrap">
-        <div class="prog-meta">
-          <span class="prog-label"><i class="planet-ico">🪐</i> PLANETA HOSTIL</span>
-          <span id="space-time">3:00</span>
-          <span class="prog-label"><i class="planet-ico">🪐</i> JÚPITER VECINO</span>
+      <div class="space-card" id="space-score">
+        <div class="lbl">METEORITOS</div>
+        <b id="spaceScoreNum">0</b>
+      </div>
+    </div>
+    <div id="space-progress-wrap">
+      <div class="prog-meta">
+        <span class="prog-label"><i class="planet-ico">🪐</i> PLANETA HOSTIL</span>
+        <span id="space-time">3:00</span>
+        <span class="prog-label"><i class="planet-ico">🪐</i> JÚPITER VECINO</span>
+      </div>
+      <div class="prog-track">
+        <div id="space-fill"></div>
+        <div id="space-mini-rocket" style="left: 0%;">
+          <span class="rocket-trail"></span>
+          <span class="rocket-icon">🚀</span>
         </div>
-        <div class="prog-track">
-          <div id="space-fill"></div>
-          <div id="space-mini-rocket" style="left: 0%;">
-            <span class="rocket-trail"></span>
-            <span class="rocket-icon">🚀</span>
+      </div>
+    </div>
+    <div id="space-instruction">Mover: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Disparo: <kbd>Espacio</kbd> o
+      <kbd>Clic Izquierdo</kbd></div>
+  </div>
+
+  <div id="touch" class="hidden">
+    <div id="stick">
+      <div id="knob"></div>
+    </div>
+    <button class="tbtn" id="t-fire">FUEGO</button>
+    <button class="tbtn" id="t-use">E</button>
+    <button class="tbtn" id="t-swap">ARMA</button>
+    <button class="tbtn" id="t-run">CORRER</button>
+    <button class="tbtn" id="t-dash">DASH</button>
+    <button class="tbtn" id="t-grenade">GRANADA</button>
+    <button class="tbtn" id="t-zoom">MIRA</button>
+  </div>
+
+  <!-- Menú principal -->
+  <div class="ovl menu" id="ovl-start">
+    <div class="menu-wrap">
+      <h1 class="logo">VARADO</h1>
+      <div class="menu-btns main">
+        <button class="btn primary" id="btn-play" disabled>Cargando…</button>
+        <button class="btn" id="btn-menu-settings">Configuración</button>
+        <button class="btn" id="btn-menu-ach">Logros</button>
+      </div>
+      <div class="hint" id="load-hint">Preparando el planeta…</div>
+    </div>
+  </div>
+
+  <!-- Selección de dificultad -->
+  <div class="ovl menu hidden" id="ovl-diff">
+    <div class="menu-wrap">
+      <h2 class="sub">DIFICULTAD</h2>
+      <div class="menu-btns diff">
+        <button class="btn diff-btn" data-diff="easy"><span>Fácil</span><small>Una travesía tranquila para explorar el
+            planeta y dominar los controles sin agobios.</small></button>
+        <button class="btn diff-btn primary" data-diff="normal"><span>Moderado</span><small>El desafío original:
+            supervivencia táctica, reflejos y adrenalina en equilibrio.</small></button>
+        <button class="btn diff-btn" data-diff="hard"><span>Difícil</span><small>Peligro constante. Recursos escasos y
+            enemigos hostiles que no perdonan errores.</small></button>
+        <button class="btn diff-btn inf" data-diff="infestation"><span>INFESTACIÓN</span><small>Mucha
+            suerte.</small></button>
+      </div>
+      <div class="controls">
+        <span><kbd>W A S D</kbd> mover</span>
+        <span><kbd>Ratón</kbd> apuntar</span>
+        <span><kbd>Clic</kbd> disparar</span>
+        <span><kbd>E</kbd> usar</span>
+        <span><kbd>1 2 3 4</kbd> / <kbd>Rueda</kbd> armas</span>
+        <span><kbd>Z</kbd> mira francotirador</span>
+        <span><kbd>Shift</kbd> correr</span>
+        <span><kbd>C</kbd> dash</span>
+        <span><kbd>G</kbd> granada de plasma</span>
+        <span><kbd>Esc</kbd> pausa</span>
+      </div>
+      <button class="btn" id="btn-diff-back">Volver</button>
+    </div>
+  </div>
+
+  <!-- Logros -->
+  <div class="ovl menu hidden" id="ovl-ach">
+    <div class="menu-wrap wide">
+      <h2 class="sub">LOGROS <small id="ach-count">0 / 0</small></h2>
+      <div id="ach-list"></div>
+      <div class="row-btns">
+        <button class="btn" id="btn-ach-back">Volver</button>
+        <button class="btn danger" id="btn-ach-reset">Reiniciar logros</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pausa -->
+  <div class="ovl hidden" id="ovl-pause">
+    <div class="panel small">
+      <h2>PAUSA</h2>
+      <div class="menu-btns">
+        <button class="btn primary" id="btn-resume">Reanudar</button>
+        <button class="btn" id="btn-settings">Configuración</button>
+        <button class="btn" id="btn-cp">Reiniciar al checkpoint</button>
+        <button class="btn" id="btn-restart">Reiniciar nivel</button>
+        <button class="btn eval" id="btn-quit-eval">Salir y Evaluar juego</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Configuración (compartida entre menú principal y pausa) -->
+  <div class="ovl hidden" id="ovl-settings">
+    <div class="panel small">
+      <h2>CONFIGURACIÓN</h2>
+      <div class="settings-list">
+        <div class="setting-row">
+          <label for="vol-master">Volumen general</label>
+          <div class="setting-ctrl"><input type="range" id="vol-master" min="0" max="100" step="1" value="100" /><span
+              class="setting-val" id="vol-master-val">100</span></div>
+        </div>
+        <div class="setting-row">
+          <label for="vol-sfx">Volumen de efectos</label>
+          <div class="setting-ctrl"><input type="range" id="vol-sfx" min="0" max="100" step="1" value="100" /><span
+              class="setting-val" id="vol-sfx-val">100</span></div>
+        </div>
+        <div class="setting-row">
+          <label for="vol-weapon">Volumen de armas</label>
+          <div class="setting-ctrl"><input type="range" id="vol-weapon" min="0" max="100" step="1" value="100" /><span
+              class="setting-val" id="vol-weapon-val">100</span></div>
+        </div>
+        <div class="setting-row">
+          <label for="vol-buggy">Volumen del buggy</label>
+          <div class="setting-ctrl"><input type="range" id="vol-buggy" min="0" max="100" step="1" value="100" /><span
+              class="setting-val" id="vol-buggy-val">100</span></div>
+        </div>
+        <div class="setting-row">
+          <label for="vol-music">Volumen de la música</label>
+          <div class="setting-ctrl"><input type="range" id="vol-music" min="0" max="100" step="1" value="60" /><span
+              class="setting-val" id="vol-music-val">60</span></div>
+        </div>
+        <div class="setting-row">
+          <label for="sens-range">Sensibilidad</label>
+          <div class="setting-ctrl">
+            <input type="range" id="sens-range" min="0.1" max="10" step="0.1" value="1" />
+            <span class="setting-val" id="sens-val">1.0</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label>Calidad gráfica</label>
+          <div class="quality-pills" id="quality-pills" role="radiogroup" aria-label="Calidad gráfica">
+            <button type="button" class="q-btn" data-q="auto">Automática</button>
+            <button type="button" class="q-btn" data-q="low">Baja</button>
+            <button type="button" class="q-btn" data-q="medium">Media</button>
+            <button type="button" class="q-btn" data-q="high">Alta</button>
           </div>
         </div>
       </div>
-      <div id="space-instruction">Mover: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Disparo: <kbd>Espacio</kbd> o <kbd>Clic Izquierdo</kbd></div>
-    </div>
-
-    <div id="touch" class="hidden">
-      <div id="stick"><div id="knob"></div></div>
-      <button class="tbtn" id="t-fire">FUEGO</button>
-      <button class="tbtn" id="t-use">E</button>
-      <button class="tbtn" id="t-swap">ARMA</button>
-      <button class="tbtn" id="t-run">CORRER</button>
-      <button class="tbtn" id="t-dash">DASH</button>
-      <button class="tbtn" id="t-grenade">GRANADA</button>
-      <button class="tbtn" id="t-zoom">MIRA</button>
-    </div>
-
-    <!-- Menú principal -->
-    <div class="ovl menu" id="ovl-start">
-      <div class="menu-wrap">
-        <div class="kicker">Misión de supervivencia</div>
-        <h1 class="logo">VARADO</h1>
-        <div class="menu-btns main">
-          <button class="btn primary" id="btn-play" disabled>Cargando…</button>
-          <button class="btn" id="btn-menu-settings">Configuración</button>
-          <button class="btn" id="btn-menu-ach">Logros</button>
-        </div>
-        <div class="hint" id="load-hint">Preparando el planeta…</div>
+      <div class="menu-btns">
+        <button class="btn primary" id="btn-settings-back">Volver</button>
       </div>
     </div>
+  </div>
 
-    <!-- Selección de dificultad -->
-    <div class="ovl menu hidden" id="ovl-diff">
-      <div class="menu-wrap">
-        <h2 class="sub">DIFICULTAD</h2>
-        <div class="menu-btns diff">
-          <button class="btn diff-btn" data-diff="easy"><span>Fácil</span><small>Una travesía tranquila para explorar el planeta y dominar los controles sin agobios.</small></button>
-          <button class="btn diff-btn primary" data-diff="normal"><span>Moderado</span><small>El desafío original: supervivencia táctica, reflejos y adrenalina en equilibrio.</small></button>
-          <button class="btn diff-btn" data-diff="hard"><span>Difícil</span><small>Peligro constante. Recursos escasos y enemigos hostiles que no perdonan errores.</small></button>
-          <button class="btn diff-btn inf" data-diff="infestation"><span>INFESTACIÓN</span><small>Mucha suerte.</small></button>
-        </div>
-        <div class="controls">
-          <span><kbd>W A S D</kbd> mover</span>
-          <span><kbd>Ratón</kbd> apuntar</span>
-          <span><kbd>Clic</kbd> disparar</span>
-          <span><kbd>E</kbd> usar</span>
-          <span><kbd>1 2 3 4</kbd> / <kbd>Rueda</kbd> armas</span>
-          <span><kbd>Z</kbd> mira francotirador</span>
-          <span><kbd>Shift</kbd> correr</span>
-          <span><kbd>C</kbd> dash</span>
-          <span><kbd>G</kbd> granada de plasma</span>
-          <span><kbd>Esc</kbd> pausa</span>
-        </div>
-        <button class="btn" id="btn-diff-back">Volver</button>
-      </div>
+  <div class="ovl hidden" id="ovl-dead">
+    <div class="panel danger">
+      <h2 id="dead-title">¡CAÍSTE!</h2>
+      <p class="story" id="dead-text">La horda te alcanzó.</p>
+      <a class="btn eval" id="eval-dead"
+        href="https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit" target="_blank"
+        rel="noopener noreferrer">Evaluar el Juego</a>
+      <div class="stats" id="dead-stats"></div>
+      <button class="btn primary" id="btn-retry">Reintentar desde la baliza</button>
     </div>
+  </div>
 
-    <!-- Logros -->
-    <div class="ovl menu hidden" id="ovl-ach">
-      <div class="menu-wrap wide">
-        <h2 class="sub">LOGROS <small id="ach-count">0 / 0</small></h2>
-        <div id="ach-list"></div>
-        <div class="row-btns">
-          <button class="btn" id="btn-ach-back">Volver</button>
-          <button class="btn danger" id="btn-ach-reset">Reiniciar logros</button>
-        </div>
-      </div>
+  <div class="ovl hidden" id="ovl-space-dead">
+    <div class="panel danger">
+      <h2>¡COHETE DESTRUIDO!</h2>
+      <p class="story">
+        El cinturón de meteoritos destrozó el casco de la nave antes de alcanzar Júpiter.
+      </p>
+      <div class="stats" id="space-dead-stats"></div>
+      <button class="btn primary" id="btn-space-retry">Reintentar Nivel 2</button>
+      <button class="btn" id="btn-space-menu">Volver al menú</button>
     </div>
+  </div>
 
-    <!-- Pausa -->
-    <div class="ovl hidden" id="ovl-pause">
-      <div class="panel small">
-        <h2>PAUSA</h2>
-        <div class="menu-btns">
-          <button class="btn primary" id="btn-resume">Reanudar</button>
-          <button class="btn" id="btn-settings">Configuración</button>
-          <button class="btn" id="btn-cp">Reiniciar al checkpoint</button>
-          <button class="btn" id="btn-restart">Reiniciar nivel</button>
-          <button class="btn eval" id="btn-quit-eval">Salir y Evaluar juego</button>
-        </div>
-      </div>
+  <div class="ovl hidden" id="ovl-end">
+    <div class="panel win">
+      <h2>¡MISIÓN CUMPLIDA!</h2>
+      <p class="story">
+        ¡Has atravesado el peligroso cinturón de meteoritos y entrado con éxito en la órbita de Júpiter! La nave
+        resistió el viaje y estás a salvo en el planeta vecino.
+      </p>
+      <a class="btn eval" id="eval-end"
+        href="https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit" target="_blank"
+        rel="noopener noreferrer">Evaluar el Juego</a>
+      <div class="stats" id="end-stats"></div>
+      <button class="btn primary" id="btn-again">Volver al menú</button>
     </div>
+  </div>
 
-    <!-- Configuración (compartida entre menú principal y pausa) -->
-    <div class="ovl hidden" id="ovl-settings">
-      <div class="panel small">
-        <h2>CONFIGURACIÓN</h2>
-        <div class="settings-list">
-          <div class="setting-row">
-            <label for="vol-master">Volumen general</label>
-            <div class="setting-ctrl"><input type="range" id="vol-master" min="0" max="100" step="1" value="100" /><span class="setting-val" id="vol-master-val">100</span></div>
-          </div>
-          <div class="setting-row">
-            <label for="vol-sfx">Volumen de efectos</label>
-            <div class="setting-ctrl"><input type="range" id="vol-sfx" min="0" max="100" step="1" value="100" /><span class="setting-val" id="vol-sfx-val">100</span></div>
-          </div>
-          <div class="setting-row">
-            <label for="vol-weapon">Volumen de armas</label>
-            <div class="setting-ctrl"><input type="range" id="vol-weapon" min="0" max="100" step="1" value="100" /><span class="setting-val" id="vol-weapon-val">100</span></div>
-          </div>
-          <div class="setting-row">
-            <label for="vol-buggy">Volumen del buggy</label>
-            <div class="setting-ctrl"><input type="range" id="vol-buggy" min="0" max="100" step="1" value="100" /><span class="setting-val" id="vol-buggy-val">100</span></div>
-          </div>
-          <div class="setting-row">
-            <label for="vol-music">Volumen de la música</label>
-            <div class="setting-ctrl"><input type="range" id="vol-music" min="0" max="100" step="1" value="60" /><span class="setting-val" id="vol-music-val">60</span></div>
-          </div>
-          <div class="setting-row">
-            <label for="sens-range">Sensibilidad</label>
-            <div class="setting-ctrl">
-              <input type="range" id="sens-range" min="0.1" max="10" step="0.1" value="1" />
-              <span class="setting-val" id="sens-val">1.0</span>
-            </div>
-          </div>
-          <div class="setting-row">
-            <label>Calidad gráfica</label>
-            <div class="quality-pills" id="quality-pills" role="radiogroup" aria-label="Calidad gráfica">
-              <button type="button" class="q-btn" data-q="auto">Automática</button>
-              <button type="button" class="q-btn" data-q="low">Baja</button>
-              <button type="button" class="q-btn" data-q="medium">Media</button>
-              <button type="button" class="q-btn" data-q="high">Alta</button>
-            </div>
-          </div>
-        </div>
-        <div class="menu-btns">
-          <button class="btn primary" id="btn-settings-back">Volver</button>
-        </div>
-      </div>
-    </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
 
-    <div class="ovl hidden" id="ovl-dead">
-      <div class="panel danger">
-        <h2 id="dead-title">¡CAÍSTE!</h2>
-        <p class="story" id="dead-text">La horda te alcanzó.</p>
-        <a class="btn eval" id="eval-dead" href="https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit" target="_blank" rel="noopener noreferrer">Evaluar el Juego</a>
-        <div class="stats" id="dead-stats"></div>
-        <button class="btn primary" id="btn-retry">Reintentar desde la baliza</button>
-      </div>
-    </div>
-
-    <div class="ovl hidden" id="ovl-space-dead">
-      <div class="panel danger">
-        <h2>¡COHETE DESTRUIDO!</h2>
-        <p class="story">
-          El cinturón de meteoritos destrozó el casco de la nave antes de alcanzar Júpiter.
-        </p>
-        <div class="stats" id="space-dead-stats"></div>
-        <button class="btn primary" id="btn-space-retry">Reintentar Nivel 2</button>
-        <button class="btn" id="btn-space-menu">Volver al menú</button>
-      </div>
-    </div>
-
-    <div class="ovl hidden" id="ovl-end">
-      <div class="panel win">
-        <h2>¡MISIÓN CUMPLIDA!</h2>
-        <p class="story">
-          ¡Has atravesado el peligroso cinturón de meteoritos y entrado con éxito en la órbita de Júpiter! La nave resistió el viaje y estás a salvo en el planeta vecino.
-        </p>
-        <a class="btn eval" id="eval-end" href="https://docs.google.com/forms/d/1OGeIBWHcGsGwSCpw-GX3O-HOwJxN4AePnH-cYvA4_M0/edit" target="_blank" rel="noopener noreferrer">Evaluar el Juego</a>
-        <div class="stats" id="end-stats"></div>
-        <button class="btn primary" id="btn-again">Volver al menú</button>
-      </div>
-    </div>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
 </html>
