@@ -10,3 +10,4 @@ const cmd = process.platform === 'win32'
 execSync(cmd, { stdio: 'inherit' })
 
 console.log('Listo! El archivo varado-html5.zip esta actualizado y listo para subir a itch.io.')
+
