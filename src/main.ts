@@ -529,14 +529,51 @@ $('btn-retry').addEventListener('click', () => {
   game.respawn()
 })
 
+// Al terminar el juego: la imagen se cierra a negro, créditos unos 10 segundos,
+// se vuelve a cerrar y se abre mostrando el menú principal.
+const CREDITS_MS = 10000
+let creditsTimer = 0
+let creditsStage: 'idle' | 'closing' | 'showing' | 'leaving' = 'idle'
+
+function leaveCredits(): void {
+  if (creditsStage !== 'showing') return
+  creditsStage = 'leaving'
+  clearTimeout(creditsTimer)
+  hud.irisClose(1400)
+  window.setTimeout(() => {
+    $('ovl-credits').classList.add('hidden')
+    engineStop()
+    game.spaceLevel.showHud(false)
+    showMenuBackground(true)
+    game.resetRun()
+    hud.overlay('start', true)
+    hud.irisOpen(350, 2200)
+    creditsStage = 'idle'
+  }, 1500)
+}
+
 $('btn-again').addEventListener('click', () => {
+  if (creditsStage !== 'idle') return
+  creditsStage = 'closing'
   audioInit()
-  engineStop()
-  hud.overlay('end', false)
-  game.spaceLevel.showHud(false)
-  showMenuBackground(true)
-  game.resetRun()
-  hud.overlay('start', true)
+  hud.irisClose(1500)
+  window.setTimeout(() => {
+    hud.overlay('end', false)
+    const el = $('ovl-credits')
+    el.classList.remove('hidden')
+    // reinicia la animación de entrada de los créditos
+    el.classList.remove('in')
+    void el.offsetWidth
+    el.classList.add('in')
+    hud.irisHide()
+    creditsStage = 'showing'
+    creditsTimer = window.setTimeout(leaveCredits, CREDITS_MS)
+  }, 1650)
+})
+// un clic o una tecla saltan los créditos
+$('ovl-credits').addEventListener('click', leaveCredits)
+addEventListener('keydown', e => {
+  if (creditsStage === 'showing' && (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape')) leaveCredits()
 })
 
 const btnSpaceRetry = $('btn-space-retry')

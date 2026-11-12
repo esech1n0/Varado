@@ -30,6 +30,8 @@ const VEHICLE: Record<VehicleKind, { name: string; speed: number; accel: number;
   gun: { name: 'buggy artillado', speed: 0.95, accel: 0.95, steer: 1 },
   moto: { name: 'moto', speed: 1.25, accel: 1.35, steer: 1.25 },
 }
+/** Avance hacia el cohete (0 = torre, 1 = portón) en el que aparece cada una de las cinco hordas del regreso. */
+const HORDE_MARKS = [0.01, 0.17, 0.33, 0.49, 0.64]
 /** Alcance de la lengua del coloso. */
 const COLOSSUS_LICK = 300
 
@@ -37,8 +39,8 @@ export interface FuelStone { x: number; y: number; z: number; taken: boolean; me
 export interface Grenade { x: number; y: number; z: number; vx: number; vy: number; vz: number; fuse: number; stuck: null | { type: 'wall' } | { type: 'enemy'; e: Enemy; dx: number; dy: number } | { type: 'imp'; dx: number; dy: number }; mesh: THREE.Group; core: THREE.Mesh; light: THREE.Mesh }
 export interface Blast { mesh: THREE.Mesh; t: number; max: number }
 export interface Beam { mesh: THREE.Mesh; t: number; max: number }
-export interface Pickup { kind: PickupKind; x: number; y: number; z: number; taken: boolean; mesh: THREE.Group; glow: THREE.Mesh; dyn: boolean; camp?: boolean; ph: number }
-export interface Lego { x: number; y: number; variant: number; taken: boolean; mesh: THREE.Group; halo: THREE.Mesh; ph: number; spark: number }
+export interface Pickup { kind: PickupKind; x: number; y: number; z: number; taken: boolean; mesh: THREE.Group; glow: THREE.Mesh; dyn: boolean; camp?: boolean; ph: number; lv?: number }
+export interface Lego { x: number; y: number; variant: number; taken: boolean; mesh: THREE.Group; halo: THREE.Mesh; beam: THREE.Mesh; ph: number; spark: number }
 export interface Turret { x: number; y: number; hp: number; state: 'idle' | 'lock' | 'cool' | 'dead'; t: number; aim: number; mesh: THREE.Group; rig: TurretRig; beam: THREE.Mesh; beamT: number; flash: number }
 export interface Gen { x: number; y: number; hp: number; alive: boolean; mesh: THREE.Group; core: THREE.Mesh }
 export interface Fence { spec: FenceSpawn; a: Gen; b: Gen; beams: THREE.Mesh[]; on: boolean; warn: boolean; len: number; ang: number }
@@ -254,6 +256,8 @@ export class Game {
   get perkStamina(): boolean { return this.stats.lego >= LEGO_PERKS.stamina }
   get perkFreeRun(): boolean { return this.stats.lego >= LEGO_PERKS.freeRun }
   get perkInfinite(): boolean { return this.stats.lego >= LEGO_PERKS.infinite }
+  /** Con 4 piezas LEGO del nivel del cohete, todas las armas disparan un 25% más rápido. */
+  get fireMul(): number { return this.spaceLevel.rapidFire ? 0.75 : 1 }
   get staminaMax(): number { return STAMINA.max * (this.perkStamina ? LEGO_PERKS.staminaMul : 1) }
 
   setDifficulty(d: DifficultyId): void {
@@ -352,7 +356,7 @@ export class Game {
       return true
     }
     for (const k of this.pickups) {
-      if (k.kind !== 'plasma' || k.dyn) continue
+      if (k.kind !== 'plasma' || k.dyn || k.lv === 2) continue
       let x = 0
       let y = 0
       for (let tries = 0; tries < 200; tries++) {
@@ -437,8 +441,11 @@ export class Game {
       const mesh = makeLego(s.variant)
       mesh.scale.setScalar(1.45)
       const halo = new THREE.Mesh(new THREE.SphereGeometry(20, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffe98a, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending }))
-      this.itemsG.add(mesh, halo)
-      this.legos.push({ x: s.x, y: s.y, variant: s.variant, taken: false, mesh, halo, ph: Math.random() * 6, spark: 0 })
+      // haz vertical: marca la pieza desde lejos, aunque quede detrás de un muro
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 4, 300, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xff6ab0, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }))
+      beam.position.set(s.x, 160, s.y)
+      this.itemsG.add(mesh, halo, beam)
+      this.legos.push({ x: s.x, y: s.y, variant: s.variant, taken: false, mesh, halo, beam, ph: Math.random() * 6, spark: 0 })
     }
     // torretas
     for (const s of W.turrets) {
@@ -658,6 +665,8 @@ export class Game {
     if (this.buggyBeaconM) this.buggyBeaconM.visible = false
     this.hud.updateBuggyMarker(0, 0, 0, false)
     this.spaceLevel?.showHud(false)
+    if (this.spaceLevel) this.spaceLevel.legoCount = 0
+    this.hud.irisHide()
     this.ending = { t: 0, fade: false, shown: false }
     this.radioQ = []
     setMusicMode('menu')
@@ -1171,7 +1180,7 @@ export class Game {
       }
       p.ammo[w.id]--
     }
-    p.cd = w.rate
+    p.cd = w.rate * this.fireMul
     this.lastFireT = this.t
     this.weaponKick = (w.id === 'shotgun') ? 0.16 : 0.08
     if (w.id === 'sniper') {
@@ -1727,11 +1736,15 @@ export class Game {
       this.fx.jet(jx, pos.y, 4, 2, 0xd8c79a, 80, 120, 0.9, 8)
     }
     this.shake = e.t > 0.4 && e.t < 3 ? 4 : 0
-    if (e.t > 3.3 && !e.fade) {
+    if (e.t > (this.level === 2 ? 3.4 : 3.3) && !e.fade) {
       e.fade = true
-      this.hud.fade(true)
+      if (this.level === 2) {
+        this.hud.showHud(false)
+        this.hud.irisClose(1900)
+      }
+      else this.hud.fade(true)
     }
-    if (e.t > 4.6 && !e.shown) {
+    if (e.t > (this.level === 2 ? 6.2 : 4.6) && !e.shown) {
       e.shown = true
       if (this.level === 2) this.finale()
       else {
@@ -1748,7 +1761,7 @@ export class Game {
     if (this.buggyBeaconM) this.buggyBeaconM.visible = false
     this.hud.updateBuggyMarker(0, 0, 0, false)
     this.input.exitLock()
-    setMusicMode('boss')
+    setMusicMode('space')
     this.spaceLevel.start({
 onVictory: (stats) => {
         // fin del viaje: viñetas de llegada y, después, el planeta Bershna
@@ -2921,7 +2934,7 @@ onVictory: (stats) => {
   private freshL2() {
     return {
       stairW: 0, stairTh: 0, inShaft: false, hallLeft: 1, comms: 0 as 0 | 1 | 2, commsT: 0, lever: false, doorT: 0,
-      bossSpawned: false, bossDead: false, stonesMsg: false, hallMsg: false, clearMsg: false,
+      bossSpawned: false, bossDead: false, stonesMsg: false, hallMsg: false, clearMsg: false, waves: 0,
     }
   }
   private get stairMax(): number { return BERSHNA.stairTurns * Math.PI * 2 }
@@ -2938,7 +2951,11 @@ onVictory: (stats) => {
 
   private buildBershnaEntities(): void {
     const b = this.b
-    for (const s of b.pickups) this.pickups.push(this.makePickup(s.kind, s.x, s.y, false, s.z ?? 0))
+    for (const s of b.pickups) {
+      const k = this.makePickup(s.kind, s.x, s.y, false, s.z ?? 0)
+      k.lv = 2
+      this.pickups.push(k)
+    }
     for (const s of b.beacons) {
       const mesh = makeBeacon()
       mesh.position.set(s.x, 0, s.y)
@@ -3129,6 +3146,7 @@ onVictory: (stats) => {
     this.hud.caption('Planeta Bershna', 3200)
     this.say('Bershna. Aire respirable... y una tormenta de arena que no deja ver nada. Esas cúpulas llevan años abandonadas.', 5)
     this.say('Si aquí hubo colonos, habrá una torre de control. Desde allí podré contactar con la Tierra.', 10.5)
+    if (this.spaceLevel.rapidFire) this.hud.showControlHint('Piezas LEGO del cohete: <b>cadencia de disparo aumentada</b>', 6000)
   }
 
   /** Lógica por fotograma de Bershna: vehículo activo, torre, comunicaciones, almacén y jefe. */
@@ -3231,7 +3249,7 @@ onVictory: (stats) => {
 
     // el coloso aparece tapando la entrada de la zona de aterrizaje
     const g = this.gatePos
-    if (L.stonesMsg && !L.bossSpawned && Math.hypot(p.x - g.x, p.y - g.y) < 1500) {
+    if (L.stonesMsg && !L.bossSpawned && L.waves >= HORDE_MARKS.length && Math.hypot(p.x - g.x, p.y - g.y) < 1500) {
       L.bossSpawned = true
       for (const e of this.enemies) {
         if (e.roam && e.state !== 'dead') { e.hp = 0; e.state = 'dead'; e.deadT = 0 }
@@ -3313,7 +3331,7 @@ onVictory: (stats) => {
     const dist = (x: number, y: number): number => Math.round(Math.hypot(x - p.x, y - p.y) / 10)
     if (L.bossDead) return p.fuelPlaced < need ? 'Carga las <b>piedras de ignición</b> en el cohete (E)' : '<b>Despega</b> rumbo a Debhor (E)'
     if (L.bossSpawned) return 'Derrota al <b>coloso de roca</b> que bloquea la zona de aterrizaje'
-    if (L.stonesMsg) return `Regresa al <b>cohete</b> con las piedras · ${dist(BERSHNA.ship.x, BERSHNA.ship.y)} m al oeste`
+    if (L.stonesMsg) return `Regresa al <b>cohete</b> con las piedras · ${dist(BERSHNA.ship.x, BERSHNA.ship.y)} m al oeste · hordas ${L.waves}/${HORDE_MARKS.length}`
     if (L.comms === 2) return L.lever ? `Abastécete y recoge las <b>piedras de ignición</b> · ${stones}/${need}` : 'Tira de la <b>palanca</b> para abrir el almacén (E)'
     if (L.comms === 1) return 'Intentando establecer <b>conexión</b>…'
     if (this.pz > BERSHNA.towerTop - 5) return 'Usa la <b>consola</b> para contactar con la Tierra (E)'
@@ -3322,29 +3340,33 @@ onVictory: (stats) => {
     return `Explora Bershna y encuentra la <b>torre de control</b> · ${dist(BERSHNA.hallX, 0)} m al este`
   }
 
-  /** Hordas del camino de vuelta, con las ocho piedras ya recogidas. */
-  private spawnHorde2(dt: number): void {
+  /**
+   * Cinco hordas en el camino de vuelta, con las ocho piedras ya recogidas: la primera al salir de la torre
+   * y las demás según avanzas hacia el cohete (todas llegan antes de que aparezca el coloso).
+   */
+  private spawnHorde2(_dt: number): void {
     const p = this.p
     const L = this.l2
-    if (!L.stonesMsg || L.bossSpawned || !p.alive || this.pz > 40 || p.x > BERSHNA.hallX - 150) return
-    this.hordeT -= dt
-    if (this.hordeT > 0) return
-    this.hordeT = ((this.buggy.riding ? 11 : 15) + rnd(-2, 4)) / Math.max(0.7, this.diff.spawn)
+    if (!L.stonesMsg || L.bossSpawned || L.waves >= HORDE_MARKS.length || !p.alive || this.pz > 40 || this.indoor) return
+    const g = this.gatePos
+    const progress = clamp((BERSHNA.hallX - p.x) / (BERSHNA.hallX - g.x), 0, 1)
+    if (progress < HORDE_MARKS[L.waves]) return
     let live = 0
     for (const e of this.enemies) if (e.roam && e.state === 'chase') live++
     if (live >= CONFIG.horde.cap) return
-    const n = Math.round((5 + rnd(0, 3)) * CONFIG.horde.size * this.diff.spawn)
+    L.waves++
+    const n = Math.min(CONFIG.horde.cap - live, Math.round((5 + L.waves + rnd(0, 2)) * CONFIG.horde.size * this.diff.spawn))
     // aparecen por delante, entre el jugador y el cohete
-    const a0 = Math.PI + rnd(-1.15, 1.15)
-    const dist = rnd(850, 1100)
-    const cx = clamp(p.x + Math.cos(a0) * dist, BERSHNA.ship.x + BERSHNA.lzHalf + 300, BERSHNA.x1 - 300)
+    const a0 = Math.PI + rnd(-1.0, 1.0)
+    const dist = rnd(820, 1050)
+    const cx = clamp(p.x + Math.cos(a0) * dist, g.x + 320, BERSHNA.x1 - 300)
     const cy = clamp(p.y + Math.sin(a0) * dist, BERSHNA.y0 + 200, BERSHNA.y1 - 200)
     for (let i = 0; i < n; i++) {
       const k = Math.random()
-      this.mkRoamer(k < 0.45 ? 'licker' : k < 0.82 ? 'acid' : k < 0.93 ? 'soldier' : 'rock', cx + rnd(-110, 110), cy + rnd(-110, 110))
+      this.mkRoamer(k < 0.45 ? 'licker' : k < 0.82 ? 'acid' : k < 0.93 ? 'soldier' : 'rock', cx + rnd(-120, 120), cy + rnd(-120, 120))
     }
     this.hordeCount += n
-    this.hud.caption('¡UNA HORDA TE CORTA EL PASO!', 2400)
+    this.hud.caption(`¡HORDA ${L.waves} DE ${HORDE_MARKS.length}!`, 2600)
     sfx.roar()
   }
 
@@ -3353,7 +3375,7 @@ onVictory: (stats) => {
     const p = this.p
     const b = this.buggy
     if (p.cd > 0) return
-    p.cd = 0.075
+    p.cd = 0.075 * this.fireMul
     this.lastFireT = this.t
     const ox = b.x - Math.cos(b.h) * 24
     const oy = b.y - Math.sin(b.h) * 24
@@ -3711,7 +3733,10 @@ onVictory: (stats) => {
     this.hud.fade(false)
     this.hud.showHud(false)
     this.hud.updateBuggyMarker(0, 0, 0, false)
+    this.storm.visible = false
     this.input.exitLock()
+    // el menú final (fondo negro) queda encima; ya no hace falta la viñeta
+    window.setTimeout(() => this.hud.irisHide(), 50)
     const totalSec = Math.floor(this.runTime + (this.spaceStats?.elapsed ?? 0))
     const mm = Math.floor(totalSec / 60)
     const ss = (totalSec % 60).toString().padStart(2, '0')
@@ -3908,7 +3933,7 @@ onVictory: (stats) => {
       if (d < nearD) { nearD = d; nearX = k.x; nearY = k.y; nearC = k.kind === 'medkit' ? 0x6dff9a : k.kind === 'ammo' ? 0xffd21f : 0x8fe3ff }
     }
     for (const l of this.legos) {
-      l.mesh.visible = l.halo.visible = !l.taken
+      l.mesh.visible = l.halo.visible = l.beam.visible = !l.taken
       if (l.taken) continue
       const y = 16 + Math.sin(this.t * 2.5 + l.ph) * 3.5
       l.mesh.position.set(l.x, y, l.y)

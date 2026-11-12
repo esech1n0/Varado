@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { makeSpaceRocket } from './gfx'
+import { achievements } from './achievements'
 import { sfx } from './audio'
 import { Input } from './input'
 import { SPACE_LEVEL } from './config'
@@ -103,6 +104,16 @@ export class SpaceLevel {
   // Meteor Spawning
   private spawnTimer = 0
   private meteorGeoCache: THREE.BufferGeometry[] = []
+
+  // Piezas LEGO de colores: 7 por viaje; con 4 sube la cadencia de disparo
+  static readonly LEGO_COLORS = [0xe5384b, 0xffc61a, 0x2f86ff, 0x3bd16f, 0xff8a1f, 0xb04aff, 0xf4f4f0]
+  static readonly LEGO_FAST = 4
+  legoCount = 0
+  private legoNext = 0
+  private legoT = 12
+  private legos: { mesh: THREE.Group; x: number; y: number; idx: number }[] = []
+  private msgT = 0
+  get rapidFire(): boolean { return this.legoCount >= SpaceLevel.LEGO_FAST }
 
   // Callbacks
   asteroidsDestroyed = 0
@@ -307,6 +318,13 @@ export class SpaceLevel {
     this.hp = this.maxHp
     this.score = 0
     this.asteroidsDestroyed = 0
+    for (const l of this.legos) this.scene.remove(l.mesh)
+    this.legos = []
+    this.legoCount = 0
+    this.legoNext = 0
+    this.legoT = 12
+    this.msgT = 0
+    this.setMessage('')
     this.shipX = 0
     this.shipY = -150
     this.shipVx = 0
@@ -338,7 +356,7 @@ export class SpaceLevel {
   /** Dispara ráfaga doble de cañones láser desde las puntas de las alas */
   private shootLasers(): void {
     if (this.shootCd > 0 || this.gameOver || this.completed) return
-    this.shootCd = 0.16 // Cadencia rápida tipo Galaga
+    this.shootCd = this.rapidFire ? 0.095 : 0.16 // Cadencia tipo Galaga (más rápida con 4 piezas LEGO)
 
     const laserGeo = new THREE.BoxGeometry(2.4, 18, 2.4)
     const laserMat = new THREE.MeshBasicMaterial({ color: 0x57f2ff })
@@ -442,8 +460,9 @@ export class SpaceLevel {
   }
 
   /** Explota un meteorito creando fragmentos de roca y chispas */
-  private explodeMeteor(m: Meteorite): void {
+  private explodeMeteor(m: Meteorite, shot = false): void {
     this.asteroidsDestroyed++
+    if (shot) achievements.add('meteors30')
     this.score += m.kind === 'small' ? 100 : m.kind === 'medium' ? 250 : 500
     sfx.kill()
 
@@ -598,7 +617,7 @@ export class SpaceLevel {
           m.hp -= l.dmg
           sfx.hit()
           if (m.hp <= 0) {
-            this.explodeMeteor(m)
+            this.explodeMeteor(m, true)
             const idx = this.meteors.indexOf(m)
             if (idx >= 0) {
               this.scene.remove(m.mesh)
@@ -651,6 +670,8 @@ export class SpaceLevel {
       }
     }
 
+    this.updateLegos(dt)
+
     // Actualizar partículas
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i]
@@ -667,6 +688,74 @@ export class SpaceLevel {
     }
 
     this.updateHud()
+  }
+
+  /** Ladrillo LEGO flotante con halo: gira mientras baja hacia el cohete. */
+  private spawnLego(idx: number): void {
+    const color = SpaceLevel.LEGO_COLORS[idx]
+    const g = new THREE.Group()
+    const m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.55, roughness: 0.3 })
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(20, 11, 11), m))
+    for (const sx of [-5, 5]) {
+      const st = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 3, 10), m)
+      st.position.set(sx, 7, 0)
+      g.add(st)
+    }
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(19, 14, 10), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }))
+    g.add(halo)
+    const x = (Math.random() - 0.5) * 380
+    g.position.set(x, 260, 0)
+    this.scene.add(g)
+    this.legos.push({ mesh: g, x, y: 260, idx })
+  }
+
+  private updateLegos(dt: number): void {
+    // aparece una pieza cada cierto tiempo; si se escapa, vuelve a salir más adelante
+    this.legoT -= dt
+    if (this.legoT <= 0 && this.legoNext < SpaceLevel.LEGO_COLORS.length && !this.completed) {
+      this.spawnLego(this.legoNext++)
+      this.legoT = 19
+    }
+    for (let i = this.legos.length - 1; i >= 0; i--) {
+      const l = this.legos[i]
+      l.y -= 62 * dt
+      l.mesh.position.set(l.x + Math.sin(this.time * 2 + l.idx) * 14, l.y, 0)
+      l.mesh.rotation.set(this.time * 1.6, this.time * 2.2 + l.idx, 0.3)
+      if (Math.hypot(l.mesh.position.x - this.shipX, l.y - this.shipY) < 34) {
+        this.scene.remove(l.mesh)
+        this.legos.splice(i, 1)
+        this.legoCount++
+        this.score += 300
+        sfx.lego()
+        achievements.set('spaceLegos', this.legoCount)
+        const total = SpaceLevel.LEGO_COLORS.length
+        if (this.legoCount === SpaceLevel.LEGO_FAST) this.setMessage('¡4 piezas LEGO! Cadencia de disparo aumentada en el cohete y en todas tus armas', 5)
+        else if (this.legoCount === total) this.setMessage('¡Las 7 piezas LEGO! Logro y aspecto LEGO desbloqueados', 5)
+        else this.setMessage(`¡Pieza LEGO! ${this.legoCount}/${total}`, 2.2)
+        continue
+      }
+      if (l.y < -260) {
+        // se escapó: otra oportunidad dentro de unos segundos
+        this.scene.remove(l.mesh)
+        this.legos.splice(i, 1)
+        const idx = l.idx
+        window.setTimeout(() => {
+          if (!this.completed && !this.gameOver && this.time < this.totalTime - 8) this.spawnLego(idx)
+        }, 4000)
+      }
+    }
+    if (this.msgT > 0) {
+      this.msgT -= dt
+      if (this.msgT <= 0) this.setMessage('')
+    }
+  }
+
+  private setMessage(text: string, secs = 0): void {
+    const el = document.getElementById('space-msg')
+    if (!el) return
+    el.textContent = text
+    el.classList.toggle('on', !!text)
+    this.msgT = secs
   }
 
   /** Actualiza los elementos visuales del HUD del nivel espacial */
@@ -700,6 +789,9 @@ export class SpaceLevel {
     // Puntuación
     const scoreNum = document.getElementById('spaceScoreNum')
     if (scoreNum) scoreNum.textContent = String(this.score)
+    const legoNum = document.getElementById('spaceLegoNum')
+    if (legoNum) legoNum.textContent = `${this.legoCount}/${SpaceLevel.LEGO_COLORS.length}`
+    document.getElementById('space-lego')?.classList.toggle('fast', this.rapidFire)
   }
 
   showHud(on: boolean): void {

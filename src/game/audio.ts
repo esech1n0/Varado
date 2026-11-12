@@ -244,7 +244,7 @@ export function engineStop(): void {
 }
 
 // ---------- Música ambiental generativa (menú y juego) ----------
-export type MusicMode = 'menu' | 'play' | 'boss'
+export type MusicMode = 'menu' | 'play' | 'boss' | 'space'
 let musicMode: MusicMode = 'menu'
 export function setMusicMode(m: MusicMode): void {
   musicMode = m
@@ -257,6 +257,25 @@ const CHORDS = [
   [55, 59, 62], // G
 ]
 const mtof = (m: number): number => 440 * Math.pow(2, (m - 69) / 12)
+
+// ---------- Tema arcade del nivel del cohete (composición original, estilo chiptune de matamarcianos) ----------
+// 8 compases de 16 semicorcheas a 150 pulsos por minuto. 0 = silencio; los demás valores son notas MIDI.
+const ARCADE_STEP = 0.1
+const ARCADE_BASS = [45, 41, 43, 40, 45, 41, 43, 40] // La, Fa, Sol, Mi
+const ARCADE_CHORDS = [
+  [57, 60, 64], [53, 57, 60], [55, 59, 62], [52, 55, 59],
+  [57, 60, 64], [53, 57, 60], [55, 59, 62], [52, 56, 59],
+]
+const ARCADE_LEAD = [
+  [81, 0, 84, 0, 88, 0, 84, 81, 79, 0, 81, 0, 84, 0, 0, 0],
+  [77, 0, 81, 0, 84, 0, 81, 77, 76, 0, 77, 0, 81, 0, 84, 0],
+  [79, 0, 83, 0, 86, 0, 83, 79, 86, 0, 88, 0, 86, 0, 83, 0],
+  [76, 0, 79, 0, 83, 0, 88, 0, 86, 0, 83, 0, 79, 0, 76, 0],
+  [88, 0, 88, 86, 84, 0, 81, 0, 84, 0, 84, 83, 81, 0, 76, 0],
+  [84, 0, 84, 81, 77, 0, 81, 0, 84, 0, 86, 0, 84, 0, 81, 0],
+  [86, 0, 86, 83, 79, 0, 83, 0, 86, 0, 88, 0, 91, 0, 88, 0],
+  [88, 0, 83, 0, 80, 0, 83, 0, 88, 88, 0, 88, 92, 0, 0, 0],
+]
 
 function startMusic(): void {
   if (!ac || !bus.music) return
@@ -327,14 +346,85 @@ function startMusic(): void {
     o.stop(t + dur + 0.05)
   }
 
+  // percusión del tema arcade: bombo (seno con barrido) y caja / charles (ruido filtrado)
+  const kick = (t: number): void => {
+    const o = ctx.createOscillator()
+    const g = ctx.createGain()
+    o.type = 'sine'
+    o.frequency.setValueAtTime(160, t)
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.12)
+    g.gain.setValueAtTime(0.22, t)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16)
+    o.connect(g)
+    g.connect(out)
+    o.start(t)
+    o.stop(t + 0.2)
+  }
+  const hit = (t: number, dur: number, vol: number, hp: number): void => {
+    const src = ctx.createBufferSource()
+    src.buffer = wBuf
+    const f = ctx.createBiquadFilter()
+    f.type = 'highpass'
+    f.frequency.value = hp
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(vol, t)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+    src.connect(f)
+    f.connect(g)
+    g.connect(out)
+    src.start(t, Math.random() * 2, dur + 0.02)
+  }
+  /** Programa un compás del tema arcade a partir de t. */
+  const arcadeBar = (t: number, n: number): void => {
+    const lead = ARCADE_LEAD[n % 8]
+    const chord = ARCADE_CHORDS[n % 8]
+    const root = ARCADE_BASS[n % 8]
+    for (let i = 0; i < 16; i++) {
+      const st = t + i * ARCADE_STEP
+      // melodía: onda cuadrada, con una octava inferior muy suave para darle cuerpo
+      if (lead[i]) {
+        const hold = lead[i + 1] === 0 ? 0.19 : 0.1
+        note(lead[i], st, hold, 0.05, 'square', false, 0.005)
+        note(lead[i] - 12, st, hold, 0.018, 'square', false, 0.005)
+      }
+      // bajo en corcheas saltando de octava
+      if (i % 2 === 0) note(root + (i % 4 === 2 ? 12 : 0), st, 0.17, 0.09, 'triangle', false, 0.005)
+      // arpegio del acorde en semicorcheas
+      note(chord[i % 3] + 12, st, 0.08, 0.016, 'square', false, 0.004)
+      if (i % 8 === 0) kick(st)
+      if (i % 8 === 4) hit(st, 0.12, 0.09, 1400)
+      if (i % 2 === 1) hit(st, 0.035, 0.03, 6500)
+    }
+    // redoble al final de cada frase de cuatro compases
+    if (n % 4 === 3) for (let k = 0; k < 4; k++) hit(t + (12 + k) * ARCADE_STEP, 0.07, 0.07, 1800)
+  }
+
   let nextT = ctx.currentTime + 0.3
   let bar = 0
+  let lastMode: MusicMode = musicMode
   window.setInterval(() => {
     if (ctx.state !== 'running' || muted || SETTINGS.musicVolume <= 0 || SETTINGS.masterVolume <= 0) {
       nextT = Math.max(nextT, ctx.currentTime + 0.3)
       return
     }
+    // en el nivel del cohete se apaga el ambiente (viento y graves) y suena el tema arcade
+    ambGain.gain.setTargetAtTime(musicMode === 'space' ? 0 : 0.04, ctx.currentTime, 0.3)
+    wet.gain.setTargetAtTime(musicMode === 'space' ? 0 : 0.5, ctx.currentTime, 0.3)
+    if (musicMode !== lastMode) {
+      // al entrar o salir del nivel del cohete, el tema empieza desde el primer compás sin esperar
+      if (musicMode === 'space' || lastMode === 'space') {
+        bar = 0
+        nextT = Math.min(nextT, ctx.currentTime + 0.25)
+      }
+      lastMode = musicMode
+    }
     while (nextT < ctx.currentTime + 1.2) {
+      if (musicMode === 'space') {
+        arcadeBar(nextT, bar)
+        nextT += ARCADE_STEP * 16
+        bar++
+        continue
+      }
       const chord = CHORDS[bar % CHORDS.length]
       const beat = musicMode === 'boss' ? 0.3 : musicMode === 'play' ? 0.42 : 0.5
       const barDur = beat * 8

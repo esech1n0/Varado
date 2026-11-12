@@ -8,7 +8,7 @@ import { makeLever, makeRocket, type LeverRig } from './gfx'
 
 export type Camp2 = { x: number; y: number; name: string; licker: number; acid: number; rock: number; soldier: number; spread: number; visited: boolean; hall?: boolean }
 export type Spot = { x: number; y: number }
-export type Pickup2 = { kind: 'medkit' | 'ammo' | 'rifle' | 'shotgun' | 'sniper'; x: number; y: number; z?: number }
+export type Pickup2 = { kind: 'medkit' | 'ammo' | 'rifle' | 'shotgun' | 'sniper' | 'plasma'; x: number; y: number; z?: number }
 export type Site2 = { id: string; name: string; x: number; y: number; w: number; d: number; visited: boolean }
 export type VehicleKind = 'buggy' | 'gun' | 'moto'
 
@@ -850,6 +850,132 @@ export function buildBershna(scene: THREE.Scene, grid: Grid): BershnaData {
       ped.castShadow = false
     }
   }
+  // ---------- Detalles de bodega en el almacén de piedras ----------
+  {
+    const wr = seeded(4242)
+    const crateC = [0x7a5c28, 0x6b4e22, 0x5d5560]
+    const frameM = m(0x3a3f49, { metalness: 0.5, roughness: 0.5 })
+    /** Estantería metálica de tres baldas pegada a una pared este/oeste, cargada de cajas. */
+    const rack = (x: number, y: number, len: number): void => {
+      solid(x, y, 30, len, H + 150)
+      for (let k = 0; k <= 3; k++) {
+        for (const dx of [2, 24]) {
+          const post = add(unit, frameM, x + dx + 2, H + 75, y + 2 + (k * (len - 4)) / 3)
+          post.scale.set(4, 150, 4)
+          post.castShadow = false
+        }
+      }
+      for (const sy of [4, 50, 96, 142]) {
+        const shelf = add(unit, frameM, x + 15, H + sy, y + len / 2)
+        shelf.scale.set(30, 3, len)
+        shelf.castShadow = false
+      }
+      for (const sy of [6, 52, 98]) {
+        for (let cy = y + 8; cy < y + len - 30; ) {
+          const w = 22 + wr() * 16
+          const hh = 18 + wr() * 20
+          if (wr() < 0.82) blk(x + 4, cy, 22, w, hh, crateC[Math.floor(wr() * 3)], { y0: H + sy, solid: false, cast: false })
+          cy += w + 6 + wr() * 14
+        }
+      }
+    }
+    rack(RX, 258, 262)
+    rack(RX + RW - 30, 258, 262)
+    // fila de barriles contra la pared sur
+    solid(RX + 60, 516, 320, 28, H + 44)
+    const barrelC = [0xd96b1e, 0x2f6fe0, 0xd96b1e, 0x8c919c, 0xd96b1e, 0x2f6fe0]
+    for (let i = 0; i < 6; i++) {
+      const bx = RX + 86 + i * 54
+      const barrel = add(new THREE.CylinderGeometry(13, 13, 40, 14), m(barrelC[i], { roughness: 0.5, metalness: 0.3 }), bx, H + 20, 530)
+      barrel.castShadow = false
+      for (const ry of [10, 30]) {
+        const ring = add(new THREE.TorusGeometry(13.3, 1, 5, 16), frameM, bx, H + ry, 530)
+        ring.rotation.x = Math.PI / 2
+        ring.castShadow = false
+      }
+      if (i % 2 === 0) {
+        const lid = add(new THREE.CylinderGeometry(4, 4, 3, 8), m(0x1b1d24), bx + 4, H + 41, 528)
+        lid.castShadow = false
+      }
+    }
+    // palé central con cajas apiladas (deja paso libre a las ocho piedras)
+    blk(RX + 198, 390, 44, 30, 6, 0x6b4e22, { y0: H, solid: false, cast: false })
+    blk(RX + 202, 393, 36, 24, 26, 0x7a5c28, { y0: H + 6, solid: false })
+    blk(RX + 208, 396, 24, 18, 18, 0x5d5560, { y0: H + 32, solid: false })
+    solid(RX + 200, 392, 40, 26, H + 50)
+    // carretilla apoyada junto a la puerta
+    blk(RX + 300, 262, 26, 20, 4, 0xd9482b, { y0: H + 4, solid: false, cast: false, mat: m(0xd9482b, { roughness: 0.5 }) })
+    blk(RX + 300, 262, 3, 20, 44, 0xd9482b, { y0: H + 4, solid: false, cast: false, mat: m(0xd9482b, { roughness: 0.5 }) })
+    // franjas de seguridad alrededor de la zona de pedestales
+    const stripe = canvasTex(64, g => {
+      g.fillStyle = '#ffc61a'
+      g.fillRect(0, 0, 64, 64)
+      g.fillStyle = '#1b1d24'
+      for (let i = -64; i < 128; i += 32) {
+        g.beginPath()
+        g.moveTo(i, 0)
+        g.lineTo(i + 16, 0)
+        g.lineTo(i + 80, 64)
+        g.lineTo(i + 64, 64)
+        g.fill()
+      }
+    }, true)
+    const hazard = (x: number, y: number, w: number, d: number): void => {
+      const t = stripe.clone()
+      t.needsUpdate = true
+      t.repeat.set(Math.max(w, d) / 24, 1)
+      if (d > w) t.rotation = Math.PI / 2
+      const s = add(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: t }), x + w / 2, H + 1.4, y + d / 2)
+      s.rotation.x = -Math.PI / 2
+      s.castShadow = false
+    }
+    hazard(RX + 40, 306, 360, 7)
+    hazard(RX + 40, 497, 360, 7)
+    hazard(RX + 40, 306, 7, 198)
+    hazard(RX + 393, 306, 7, 198)
+    // aro luminoso bajo cada pedestal
+    const ringM = new THREE.MeshBasicMaterial({ color: 0xff8a1f })
+    for (const st of stones) {
+      const ring = add(new THREE.TorusGeometry(24, 1.4, 5, 24), ringM, st.x, H + 1.6, st.y)
+      ring.rotation.x = Math.PI / 2
+      ring.castShadow = false
+    }
+    // tuberías y conducto de ventilación en el techo
+    for (const [py, pr, pc] of [[300, 5, 0x8c919c], [316, 3.5, 0xd96b1e], [500, 5, 0x8c919c]] as [number, number, number][]) {
+      const pipe = add(new THREE.CylinderGeometry(pr, pr, RW, 10), m(pc, { metalness: 0.5, roughness: 0.4 }), RX + RW / 2, H + RH - 30, py)
+      pipe.rotation.z = Math.PI / 2
+      pipe.castShadow = false
+    }
+    blk(RX + 150, 380, 140, 44, 20, 0x5d6472, { y0: H + RH - 36, solid: false, cast: false, mat: m(0x5d6472, { metalness: 0.4, roughness: 0.5 }) })
+    // rótulos en el tabique norte
+    const sign = (text: string, sub: string, x: number, w: number, bg: string, fg: string): void => {
+      const c = document.createElement('canvas')
+      c.width = 512
+      c.height = 128
+      const g = c.getContext('2d')!
+      g.fillStyle = bg
+      g.fillRect(0, 0, 512, 128)
+      g.strokeStyle = fg
+      g.lineWidth = 8
+      g.strokeRect(8, 8, 496, 112)
+      g.fillStyle = fg
+      g.textAlign = 'center'
+      g.font = 'bold 50px Audiowide, Arial, sans-serif'
+      g.fillText(text, 256, 66)
+      g.font = '26px Audiowide, Arial, sans-serif'
+      g.fillText(sub, 256, 104)
+      const t = new THREE.CanvasTexture(c)
+      t.colorSpace = THREE.SRGBColorSpace
+      const p = add(new THREE.PlaneGeometry(w, w / 4), new THREE.MeshBasicMaterial({ map: t }), x, H + 150, 245.2)
+      p.castShadow = false
+    }
+    sign('ALMACÉN 02', 'PIEDRAS DE IGNICIÓN', RX + 90, 130, '#1b1d24', '#ffc61a')
+    sign('¡PELIGRO!', 'MATERIAL INFLAMABLE', RX + 360, 120, '#c8222e', '#fff7d6')
+    // extintor junto a la puerta
+    const ext = add(new THREE.CylinderGeometry(4, 4, 18, 10), m(0xc8222e, { roughness: 0.4 }), RX + 150, H + 60, 248)
+    ext.castShadow = false
+  }
+
   pickups.push({ kind: 'medkit', x: RX + 40, y: 290, z: H }, { kind: 'medkit', x: RX + 400, y: 290, z: H }, { kind: 'ammo', x: RX + 40, y: 510, z: H }, { kind: 'ammo', x: RX + 400, y: 510, z: H }, { kind: 'ammo', x: RX + 220, y: 510, z: H })
 
   const heightAt = (x: number, y: number): number => (x >= cx + 160 && x <= RX + RW + 24 && y >= roomsY0 && y <= roomsY1 ? H : 0)
@@ -882,6 +1008,13 @@ export function buildBershna(scene: THREE.Scene, grid: Grid): BershnaData {
   monument(ox + 8900, -1500, 1, 'El anillo silencioso')
   monument(ox + 10500, 1300, 0, 'Las agujas del este')
 
+  // armas y granadas de plasma abandonadas por el planeta
+  pickups.push(
+    { kind: 'rifle', x: ox + 1860, y: 240 }, { kind: 'shotgun', x: ox + 3500, y: -1760 }, { kind: 'sniper', x: ox + 6180, y: -250 },
+    { kind: 'rifle', x: ox + 7560, y: -1760 }, { kind: 'shotgun', x: ox + 9180, y: 1760 },
+    { kind: 'plasma', x: ox + 2060, y: -420 }, { kind: 'plasma', x: ox + 4140, y: 520 }, { kind: 'plasma', x: ox + 5560, y: -1500 },
+    { kind: 'plasma', x: ox + 7240, y: 1300 }, { kind: 'plasma', x: ox + 8760, y: 300 }, { kind: 'plasma', x: HX - 320, y: -260 },
+  )
   // suministros junto a algunas viviendas
   pickups.push(
     { kind: 'medkit', x: ox + 2400, y: -520 }, { kind: 'ammo', x: ox + 3540, y: 380 }, { kind: 'ammo', x: ox + 3860, y: -1800 },
@@ -953,7 +1086,11 @@ export function buildBershna(scene: THREE.Scene, grid: Grid): BershnaData {
   cactusGeo.translate(0, 30, 0)
   const cactusMesh = new THREE.InstancedMesh(cactusGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, map: cactusTex, bumpMap: cactusTex, bumpScale: 1.5, roughness: 0.9 }), cacti.length * 3)
   let nc = 0
-  for (const [x, y, s] of cacti) {
+  for (const [x, y, s0] of cacti) {
+    // en campo abierto crecen hasta la altura del cohete (y entonces son sólidos); cerca de algo importante se quedan pequeños
+    const clear = free(x, y, 70) && pickups.every(k => Math.hypot(k.x - x, k.y - y) > 140)
+    const s = clear ? 2.2 + r() * 2.9 : Math.min(s0, 1.5)
+    if (s > 1.8) solid(x - 5 * s, y - 5 * s, 10 * s, 10 * s, 60 * s)
     const v = 0.8 + r() * 0.35
     for (let k = 0; k < 3; k++) {
       // el primero es el tronco; los otros dos, brazos más cortos pegados a él

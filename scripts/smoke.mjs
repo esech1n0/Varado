@@ -83,12 +83,12 @@ try {
   await page.waitForSelector('#ovl-settings', { state: 'hidden' })
   console.log('smoke: settings modal verified')
 
-  // Check skins (Aspecto) modal: 8 skins, 4 of them locked behind achievements
+  // Check skins (Aspecto) modal: 10 skins, 6 of them locked behind achievements
   await page.click('#btn-menu-skins')
   await page.waitForSelector('#ovl-skins:not(.hidden)')
   const skinCount = await page.locator('.skin-card').count()
   const lockedCount = await page.locator('.skin-card.locked').count()
-  if (skinCount !== 8 || lockedCount !== 4) throw new Error(`expected 8 skins / 4 locked, got ${skinCount} / ${lockedCount}`)
+  if (skinCount !== 10 || lockedCount !== 6) throw new Error(`expected 10 skins / 6 locked, got ${skinCount} / ${lockedCount}`)
   await page.click('.skin-card[data-skin="blue"]')
   await page.waitForSelector('.skin-card.sel[data-skin="blue"]')
   await page.screenshot({ path: `${out}/03b-skins.png` })

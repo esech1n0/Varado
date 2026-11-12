@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { seeded } from './geom'
-import { skinDef, type SkinId } from './skins'
+import { skinDef, type SkinDef, type SkinId } from './skins'
 
 // ---------- Materiales y piezas ----------
 const matCache = new Map<string, THREE.MeshStandardMaterial>()
@@ -420,6 +420,109 @@ function visorMat(): THREE.MeshStandardMaterial {
   return visorMatCache
 }
 
+/** Astronauta construido con piezas LEGO: bloques lisos de plástico, tacos y manos de pinza. */
+function makeLegoPlayer(sk: SkinDef): THREE.Group {
+  const g = new THREE.Group()
+  const plastic = (c: number): THREE.MeshStandardMaterial => mat(c, { roughness: 0.22, metalness: 0.02 })
+  const white = plastic(sk.suit)
+  const accent = plastic(sk.accent)
+  const yellow = plastic(0xffd21f)
+  const gray = plastic(sk.pack)
+  const dark = plastic(0x2a2d35)
+  const put = (parent: THREE.Object3D, geo: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, material)
+    m.position.set(x, y, z)
+    m.castShadow = true
+    m.receiveShadow = true
+    parent.add(m)
+    return m
+  }
+  const B = (w: number, h: number, d: number): THREE.BoxGeometry => new THREE.BoxGeometry(w, h, d)
+  const stud = (parent: THREE.Object3D, material: THREE.Material, x: number, y: number, z: number, r = 2.2): void => {
+    put(parent, new THREE.CylinderGeometry(r, r, 1.6, 12), material, x, y + 0.8, z)
+  }
+
+  // piernas: dos bloques con el pie adelantado, unidos por la cadera
+  const legs: THREE.Group[] = []
+  for (const s of [-1, 1]) {
+    const lg = new THREE.Group()
+    lg.position.set(0, 14, s * 5)
+    put(lg, B(8.5, 12, 8.6), accent, 0, -6, 0)
+    put(lg, B(11, 3.4, 8.6), accent, 1.3, -13.2, 0)
+    g.add(lg)
+    legs.push(lg)
+  }
+  const torso = new THREE.Group()
+  g.add(torso)
+  put(torso, B(9, 3.4, 19.4), dark, 0, 15.6, 0) // cadera
+  // torso trapezoidal (más ancho abajo) con el emblema del pecho
+  const chest = put(torso, new THREE.CylinderGeometry(7.6, 10.4, 17.5, 4), white, 0, 26.2, 0)
+  chest.rotation.y = Math.PI / 4
+  chest.scale.set(0.82, 1, 1.36)
+  put(torso, B(0.5, 6.5, 8), accent, 6.4, 27.6, 0)
+  put(torso, B(0.6, 2.2, 2.2), mat(0xffc61a, { emissive: 0xffc61a, emissiveIntensity: 0.8 }), 6.7, 28.4, 0)
+  // mochila: ladrillo 2x2 con tacos
+  put(torso, B(7, 14, 13), gray, -9.6, 27, 0)
+  for (const z of [-3.4, 3.4]) for (const y of [23, 31]) {
+    const st = put(torso, new THREE.CylinderGeometry(2.1, 2.1, 1.6, 12), gray, -13.8, y, z)
+    st.rotation.z = Math.PI / 2
+  }
+  // cuello y cabeza cilíndrica con casco y taco superior
+  put(torso, new THREE.CylinderGeometry(4.2, 4.2, 2.4, 14), yellow, 0, 36, 0)
+
+  const makeArm = (side: number): { arm: THREE.Group; hand: THREE.Group } => {
+    const arm = new THREE.Group()
+    arm.position.set(0, 28.5, side * 10.5)
+    put(arm, new THREE.SphereGeometry(3.6, 12, 10), white)
+    put(arm, B(12.6, 5, 5), white, 6.4, 0, 0)
+    const hand = new THREE.Group()
+    hand.position.set(13.8, 0, 0)
+    const wrist = put(hand, new THREE.CylinderGeometry(1.9, 1.9, 2.4, 10), yellow, -0.6, 0, 0)
+    wrist.rotation.z = Math.PI / 2
+    // mano de pinza en C
+    const claw = put(hand, new THREE.TorusGeometry(2.5, 1.15, 8, 14, Math.PI * 1.5), yellow, 2.4, 0, 0)
+    claw.rotation.set(Math.PI / 2, 0, Math.PI * 0.25)
+    arm.add(hand)
+    torso.add(arm)
+    return { arm, hand }
+  }
+  const { arm: armR, hand: handR } = makeArm(1)
+  const { arm: armL, hand: handL } = makeArm(-1)
+
+  const weaponMount = new THREE.Group()
+  weaponMount.position.set(14, 28, 0)
+  torso.add(weaponMount)
+  const guns = { pistol: makeGun('pistol'), rifle: makeGun('rifle'), shotgun: makeGun('shotgun'), sniper: makeGun('sniper') }
+  guns.pistol.position.set(5, 7, 0)
+  guns.rifle.position.set(2, 9, 0)
+  guns.shotgun.position.set(6, 7, 0)
+  guns.sniper.position.set(10, 7, 0)
+  for (const k of Object.keys(guns) as Exclude<GunKind, 'plasma'>[]) {
+    guns[k].visible = false
+    weaponMount.add(guns[k])
+  }
+
+  const headGroup = new THREE.Group()
+  headGroup.position.set(0, 44, 0)
+  put(headGroup, new THREE.CylinderGeometry(7.4, 7.4, 13, 20), yellow, 0, -0.5, 0)
+  // casco clásico: cubre la cabeza y deja el frente para el visor
+  const helmet = put(headGroup, new THREE.SphereGeometry(9.6, 22, 16), white, -0.6, 1.4, 0)
+  helmet.scale.set(1, 1.02, 1)
+  const visor = put(headGroup, new THREE.SphereGeometry(8.3, 22, 16, Math.PI - 1.05, 2.1, 0.75, 1.25), visorMat(), 0.7, 1.4, 0)
+  visor.scale.set(1.14, 1.02, 1.02)
+  visor.castShadow = false
+  put(headGroup, B(6, 1.6, 6), white, -0.6, 10.6, 0)
+  stud(headGroup, white, -0.6, 11.4, 0, 2.6)
+  for (const s of [-1, 1]) {
+    const ear = put(headGroup, new THREE.CylinderGeometry(2.4, 2.4, 1.6, 12), accent, -0.6, 1, s * 9.4)
+    ear.rotation.x = Math.PI / 2
+  }
+  torso.add(headGroup)
+
+  g.userData = { legs, armR, armL, handR, handL, headGroup, guns, torso, weaponMount } satisfies PlayerRig
+  return g
+}
+
 /**
  * Astronauta con traje presurizado: casco con visor naranja oscuro reflectante que cubre el rostro,
  * mochila de soporte vital, unidad de control en el pecho, anillos de unión y guantes/botas.
@@ -427,6 +530,7 @@ function visorMat(): THREE.MeshStandardMaterial {
  */
 export function makePlayer(skinId: SkinId = 'white'): THREE.Group {
   const sk = skinDef(skinId)
+  if (sk.style === 'lego') return makeLegoPlayer(sk)
   const g = new THREE.Group()
   const armor = sk.style === 'armor'
   const worn = sk.style === 'worn'
@@ -614,6 +718,36 @@ export function makePlayer(skinId: SkinId = 'white'): THREE.Group {
   put(headGroup, B(7, 1.6, 3.2), packM, 0.5, 11.2, 0, false)
   put(headGroup, B(1.6, 1.2, 2.2), light(0xfff3c0), 4.6, 11, 0, false) // foco frontal
   if (armor) put(headGroup, B(12, 2.2, 4.2), suitM, -1, 11.4, 0)
+
+  if (sk.style === 'meteor') {
+    // meteoritos incrustados en relieve por todo el traje, con cráteres brillantes
+    const rockM = new THREE.MeshStandardMaterial({ color: 0x4a3222, roughness: 1, flatShading: true })
+    const emberM = mat(0xff7a22, { emissive: 0xff5500, emissiveIntensity: 1.2 })
+    const rock = new THREE.DodecahedronGeometry(1, 0)
+    const q = seeded(606)
+    const stick = (parent: THREE.Object3D, x: number, y: number, z: number, s: number): void => {
+      const r = put(parent, rock, rockM, x, y, z, false)
+      r.scale.set(s, s * (0.7 + q() * 0.5), s * (0.8 + q() * 0.4))
+      r.rotation.set(q() * 3, q() * 3, q() * 3)
+      if (q() < 0.4) put(parent, S(s * 0.34, 8), emberM, x * 1.04, y, z * 1.04, false).castShadow = false
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = q() * Math.PI * 2
+      stick(torso, Math.cos(a) * 6.9, 20 + q() * 15, Math.sin(a) * 10.4, 1.8 + q() * 1.8)
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = q() * Math.PI * 2
+      const e = q() * 1.2
+      stick(headGroup, -Math.abs(Math.cos(a)) * Math.cos(e) * 10.6, Math.sin(e) * 11, Math.sin(a) * Math.cos(e) * 10.6, 1.6 + q() * 1.6)
+    }
+    for (const arm of [armR, armL]) for (const x of [3.5, 9.5]) stick(arm, x, 2.4, (q() - 0.5) * 2, 1.5 + q())
+    for (const lg of legs) {
+      stick(lg, 4, -3.5, (q() - 0.5) * 3, 1.7 + q())
+      stick(lg, -3.6, -8, (q() - 0.5) * 3, 1.5 + q())
+    }
+    stick(torso, -14.4, 30, 3, 2.6)
+    stick(torso, -14.4, 23, -3.5, 2.2)
+  }
 
   torso.add(headGroup)
 

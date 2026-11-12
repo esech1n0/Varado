@@ -666,7 +666,8 @@ export function buildWorld(scene: THREE.Scene): WorldData {
 
   // ---------- Pasillo: loot y piezas (ajustados dentro del pasillo azul de doble ancho) ----------
   pickups.push({ kind: 'medkit', x: 1320, y: -45 }, { kind: 'medkit', x: 1680, y: 575 })
-  legos.push({ x: 42, y: 428, variant: 0 }, { x: 1210, y: 585, variant: 5 })
+  // la primera pieza está en el garaje, a la vista junto al buggy (antes quedaba en un rincón del cuarto oscuro)
+  legos.push({ x: 2400, y: 180, variant: 0 }, { x: 1210, y: 585, variant: 5 })
 
   // ---------- Mundo abierto: suelo, carretera y arena con texturas LEGO detalladas ----------
   const GW = WORLD.x1 - WORLD.x0 + 400

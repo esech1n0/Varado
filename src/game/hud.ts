@@ -81,6 +81,28 @@ export class Hud {
     }, hold)
   }
 
+  /** Lo contrario de irisOpen: el círculo se cierra hasta dejar la pantalla en negro (y así se queda). */
+  irisClose(dur = 1800): void {
+    const el = $('iris')
+    cancelAnimationFrame(this.irisRaf)
+    clearTimeout(this.irisTimer)
+    const max = Math.hypot(innerWidth, innerHeight) / 2 + 120
+    const t0 = performance.now()
+    el.classList.remove('hidden')
+    const step = (now: number): void => {
+      const k = Math.min(1, (now - t0) / dur)
+      const r = (1 - k * k * (3 - 2 * k)) * max - 120 * k
+      el.style.background = k >= 1 ? '#000' : `radial-gradient(circle at 50% 50%, transparent ${r}px, #000 ${r + 120}px)`
+      if (k < 1) this.irisRaf = requestAnimationFrame(step)
+    }
+    this.irisRaf = requestAnimationFrame(step)
+  }
+  irisHide(): void {
+    cancelAnimationFrame(this.irisRaf)
+    clearTimeout(this.irisTimer)
+    $('iris').classList.add('hidden')
+  }
+
   /** Muestra sugerencia emergente de controles o recordatorios de misión. */
   showControlHint(html: string, ms = 5000): void {
     const el = $('control-hint')

@@ -87,11 +87,16 @@
           <div id="spaceHullNum">100%</div>
         </div>
       </div>
+      <div class="space-card" id="space-lego">
+        <div class="lbl">PIEZAS LEGO</div>
+        <b id="spaceLegoNum">0/7</b>
+      </div>
       <div class="space-card" id="space-score">
         <div class="lbl">METEORITOS</div>
         <b id="spaceScoreNum">0</b>
       </div>
     </div>
+    <div id="space-msg"></div>
     <div id="space-progress-wrap">
       <div class="prog-meta">
         <span class="prog-label"><i class="planet-ico">🪐</i> PLANETA HOSTIL</span>
@@ -300,14 +305,35 @@
 
   <div class="ovl hidden" id="ovl-end">
     <div class="panel win">
-      <h2>¡MISIÓN CUMPLIDA!</h2>
+      <h2>¡GRACIAS POR JUGAR!</h2>
       <p class="story">
-        Con las ocho piedras de ignición a bordo, el cohete deja atrás Bershna y pone rumbo a Debhor. En algún
-        lugar de ese planeta, tu escuadrón sigue esperando.
+        Has completado <b>VARADO</b>. Con las ocho piedras de ignición a bordo, el cohete deja atrás Bershna y pone
+        rumbo a Debhor, donde tu escuadrón sigue esperando.
       </p>
-      <button class="btn eval" id="eval-end" type="button">Evaluar el Juego</button>
+      <p class="story">Gracias por acompañar a nuestro astronauta hasta aquí. Tu opinión nos ayuda a mejorar el juego.</p>
+      <p class="to-be-continued">Esta historia continuará…</p>
       <div class="stats" id="end-stats"></div>
-      <button class="btn primary" id="btn-again">Volver al menú</button>
+      <div class="row-btns">
+        <button class="btn eval" id="eval-end" type="button">Evaluar el Juego</button>
+        <button class="btn primary" id="btn-again">Volver al menú</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Créditos -->
+  <div class="ovl hidden" id="ovl-credits">
+    <div class="credits">
+      <h1 class="logo">VARADO</h1>
+      <div class="credits-block">
+        <span class="credits-label">Equipo desarrollador</span>
+        <b>Derek Adrián Brito Araujo</b>
+        <b>Edson Ibrahin Ramos Garcia</b>
+        <b>Leonardo Ramiro Castillo Rodriguez</b>
+      </div>
+      <div class="credits-block">
+        <span class="credits-label">Diseño de Videojuegos · Sección D02</span>
+        <b>JOSE LUIS DAVID BONILLA CARRANZA</b>
+      </div>
     </div>
   </div>
 
