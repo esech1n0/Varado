@@ -65,12 +65,66 @@ export type DifficultyDef = {
   drops: number
   /** Multiplicador de vida enemiga. */
   hp: number
+  /** Multiplicador del daño recibido por el jugador (ej. 0.8 = 20% menos de daño). */
+  damageTaken?: number
+  /** Intervalo en segundos entre hordas en el mundo abierto. */
+  hordeInterval?: number
+  /** Retardo de preparación telegrafiada para ataques melee al estar cerca (en segundos). */
+  meleeWindup?: number
 }
 export const DIFFICULTIES: Record<DifficultyId, DifficultyDef> = {
-  easy: { id: 'easy', name: 'Fácil', blurb: 'Una travesía tranquila para explorar el planeta y dominar los controles sin agobios.', spawn: 0.7, speed: 0.9, attack: 1.25, drops: 1.3, hp: 1 },
-  normal: { id: 'normal', name: 'Moderado', blurb: 'El desafío original: supervivencia táctica, reflejos y adrenalina en equilibrio.', spawn: 1, speed: 1, attack: 1, drops: 1, hp: 1 },
-  hard: { id: 'hard', name: 'Difícil', blurb: 'Peligro constante. Recursos escasos y enemigos hostiles que no perdonan errores.', spawn: 1.1, speed: 1.1, attack: 1, drops: 0.9, hp: 1.05 },
-  infestation: { id: 'infestation', name: 'INFESTACIÓN', blurb: 'Mucha suerte.', spawn: 1.25, speed: 1.2, attack: 1, drops: 0.85, hp: 1.1 },
+  easy: {
+    id: 'easy',
+    name: 'Fácil',
+    blurb: 'Una travesía tranquila para explorar el planeta y dominar los controles sin agobios.',
+    spawn: 0.7,
+    speed: 0.8,
+    attack: 1.5,
+    drops: 1.3,
+    hp: 0.95,
+    damageTaken: 0.8,
+    hordeInterval: 55,
+    meleeWindup: 0.5,
+  },
+  normal: {
+    id: 'normal',
+    name: 'Moderado',
+    blurb: 'El desafío original: supervivencia táctica, reflejos y adrenalina en equilibrio.',
+    spawn: 1,
+    speed: 1,
+    attack: 1,
+    drops: 1,
+    hp: 1,
+    damageTaken: 1,
+    hordeInterval: 24,
+    meleeWindup: 0.15,
+  },
+  hard: {
+    id: 'hard',
+    name: 'Difícil',
+    blurb: 'Peligro constante. Recursos escasos y enemigos hostiles que no perdonan errores.',
+    spawn: 1.1,
+    speed: 1.1,
+    attack: 1,
+    drops: 0.9,
+    hp: 1.05,
+    damageTaken: 1,
+    hordeInterval: 20,
+    meleeWindup: 0.05,
+  },
+  infestation: {
+    id: 'infestation',
+    name: 'INFESTACIÓN',
+    blurb: 'Mucha suerte.',
+    spawn: 1.25,
+    speed: 1.2,
+    attack: 1,
+    drops: 0.85,
+    hp: 1.1,
+    damageTaken: 1.05,
+    hordeInterval: 16,
+    meleeWindup: 0,
+  },
 }
 export const DIFFICULTY_ORDER: DifficultyId[] = ['easy', 'normal', 'hard', 'infestation']
 

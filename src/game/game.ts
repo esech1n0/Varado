@@ -263,6 +263,7 @@ export class Game {
   setDifficulty(d: DifficultyId): void {
     this.difficulty = d
     this.diff = DIFFICULTIES[d]
+    CONFIG.difficulty.damageTaken = this.diff.damageTaken ?? 1
   }
 
   applyQuality(quality?: Quality): void {
@@ -658,7 +659,7 @@ export class Game {
       }
     }
     this.placeEnemy('boss', SHIP.x - 340, SHIP.y, false)
-    this.hordeT = 16 / this.diff.spawn
+    this.hordeT = (this.diff.hordeInterval ?? 24) * 0.75
     this.noiseT = 0
     this.shield.visible = true
     this.shipM.position.set(SHIP.x, 0, SHIP.y)
@@ -689,9 +690,11 @@ export class Game {
   placeEnemy(kind: AlienKind, x: number, y: number, roam: boolean): Enemy {
     const def = ALIENS[kind]
     const hp = def.hp * this.diff.hp
+    const initCd = (this.difficulty === 'easy' ? rnd(2.0, 3.5) : rnd(0.2, 1)) * this.diff.attack
+    const initAtk = (this.diff.meleeWindup ?? (this.difficulty === 'easy' ? 0.5 : 0)) * 0.5
     const e: Enemy = {
       id: this.nextId++, kind, x, y, r: def.r, hp, maxHp: hp, face: rnd(0, 6.283), state: 'idle', roam, homeX: x, homeY: y, homeFace: 0,
-      cd: rnd(0.2, 1) * this.diff.attack, atk: 0, ph: rnd(0, 6), flash: 0, flashOn: false, mv: 0, speedMul: rnd(0.9, 1.15) * this.diff.speed, stuckT: 0, lx: x, ly: y, detour: 0, dd: 1,
+      cd: initCd, atk: initAtk, ph: rnd(0, 6), flash: 0, flashOn: false, mv: 0, speedMul: rnd(0.9, 1.15) * this.diff.speed, stuckT: 0, lx: x, ly: y, detour: 0, dd: 1,
       t: 0, deadT: 0, hitCar: 0, wind: null, strafe: Math.random() < 0.5 ? 1 : -1, charging: 0, cdir: 0, stage: 0, vis: null, pulse: 0,
       armor: kind === 'rock' ? ROCK_ARMOR * this.diff.hp : 0,
     }
@@ -2714,6 +2717,21 @@ onVictory: (stats) => {
     const uy = dy / (d || 1)
 
     if (e.kind === 'soldier') {
+      if (e.wind) {
+        e.wind.t -= dt
+        e.mv = lerp(e.mv, 0, 0.3)
+        e.face += angDiff(e.face, want) * Math.min(1, dt * 10)
+        e.pulse = 0.25
+        if (e.wind.t <= 0) {
+          e.wind = null
+          if (d < e.r + pr + 14 && !ridingFast) {
+            this.hurtPlayer(def.melee, e.x, e.y, 40, 'soldier')
+          }
+          e.atk = def.meleeCd * rnd(0.9, 1.2) * this.diff.attack
+          e.pulse = 0.25
+        }
+        return
+      }
       let speed = def.speed * e.speedMul
       if (d < 220) speed *= 1.15
       e.face += angDiff(e.face, want) * turn
@@ -2725,9 +2743,16 @@ onVictory: (stats) => {
       if (d > e.r + pr + 3) this.steer(e, sx / sl, sy / sl, speed, dt, d)
       else e.mv = lerp(e.mv, 0, 0.3)
       if (d < e.r + pr + 9 && e.atk <= 0 && !ridingFast) {
-        this.hurtPlayer(def.melee, e.x, e.y, 40, 'soldier')
-        e.atk = def.meleeCd * rnd(0.9, 1.2)
-        e.pulse = 0.25
+        const windup = this.diff.meleeWindup ?? (this.difficulty === 'easy' ? 0.5 : 0)
+        if (windup > 0) {
+          e.wind = { type: 'melee', t: windup }
+          e.pulse = 0.35
+          e.flash = 0.1
+        } else {
+          this.hurtPlayer(def.melee, e.x, e.y, 40, 'soldier')
+          e.atk = def.meleeCd * rnd(0.9, 1.2) * this.diff.attack
+          e.pulse = 0.25
+        }
       }
       return
     }
@@ -2739,11 +2764,22 @@ onVictory: (stats) => {
       if (e.wind) {
         e.wind.t -= dt
         e.mv = lerp(e.mv, 0, 0.3)
-        if (e.wind.t <= 0) {
-          const a = want + rnd(-0.06, 0.06)
-          this.spawnEProj(e.x + Math.cos(a) * e.r * 1.4, e.y + Math.sin(a) * e.r * 1.4, a, 340, 11, 'shooter', 0xff7a2a, 5)
-          sfx.shoot([700, 300], 0.04)
-          e.wind = null
+        if (e.wind.type === 'shoot') {
+          if (e.wind.t <= 0) {
+            const a = want + rnd(-0.06, 0.06)
+            this.spawnEProj(e.x + Math.cos(a) * e.r * 1.4, e.y + Math.sin(a) * e.r * 1.4, a, 340, 11, 'shooter', 0xff7a2a, 5)
+            sfx.shoot([700, 300], 0.04)
+            e.wind = null
+          }
+        } else if (e.wind.type === 'melee') {
+          e.pulse = 0.25
+          if (e.wind.t <= 0) {
+            e.wind = null
+            if (d < e.r + pr + 12 && !ridingFast) {
+              this.hurtPlayer(def.melee, e.x, e.y, 40, 'shooter')
+            }
+            e.atk = def.meleeCd * this.diff.attack
+          }
         }
       } else {
         if (d > 440 || !los) this.steer(e, ux, uy, spd, dt, d)
@@ -2753,13 +2789,21 @@ onVictory: (stats) => {
           if (Math.random() < dt * 0.4) e.strafe *= -1
         }
         if (los && d < 680 && e.cd <= 0) {
-          e.wind = { type: 'shoot', t: 0.4 }
-          e.cd = 1.5 + rnd(0, 0.8)
+          const prepT = this.difficulty === 'easy' ? 0.6 : 0.4
+          e.wind = { type: 'shoot', t: prepT }
+          const baseCd = this.difficulty === 'easy' ? 3.0 + rnd(0, 1.0) : 1.5 + rnd(0, 0.8)
+          e.cd = baseCd * this.diff.attack
         }
       }
-      if (d < e.r + pr + 8 && e.atk <= 0 && !ridingFast) {
-        this.hurtPlayer(def.melee, e.x, e.y, 40, 'shooter')
-        e.atk = def.meleeCd
+      if (d < e.r + pr + 8 && e.atk <= 0 && !ridingFast && !e.wind) {
+        const windup = this.diff.meleeWindup ?? (this.difficulty === 'easy' ? 0.5 : 0)
+        if (windup > 0) {
+          e.wind = { type: 'melee', t: windup }
+          e.pulse = 0.3
+        } else {
+          this.hurtPlayer(def.melee, e.x, e.y, 40, 'shooter')
+          e.atk = def.meleeCd * this.diff.attack
+        }
       }
       return
     }
@@ -2769,20 +2813,38 @@ onVictory: (stats) => {
       if (e.wind) {
         e.wind.t -= dt
         e.mv = lerp(e.mv, 0, 0.3)
-        if (e.wind.t <= 0) {
-          this.shockwave(e.x, e.y, 135, 38, 'tank')
-          e.wind = null
+        if (e.wind.type === 'slam') {
+          if (e.wind.t <= 0) {
+            this.shockwave(e.x, e.y, 135, 38, 'tank')
+            e.wind = null
+          }
+        } else if (e.wind.type === 'punch') {
+          e.pulse = 0.35
+          if (e.wind.t <= 0) {
+            e.wind = null
+            if (d < e.r + pr + 12 && !ridingFast) {
+              this.hurtPlayer(def.melee, e.x, e.y, 90, 'tank')
+            }
+            e.atk = def.meleeCd * this.diff.attack
+          }
         }
       } else {
         if (d > e.r + pr + 2) this.steer(e, ux, uy, def.speed * e.speedMul, dt, d)
         else e.mv = lerp(e.mv, 0, 0.3)
         if (d < 125 && e.cd <= 0) {
-          e.wind = { type: 'slam', t: 0.75 }
-          e.cd = 2.8
+          e.wind = { type: 'slam', t: this.difficulty === 'easy' ? 0.85 : 0.75 }
+          e.cd = 2.8 * this.diff.attack
         }
-        if (d < e.r + pr + 7 && e.atk <= 0 && !ridingFast) {
-          this.hurtPlayer(def.melee, e.x, e.y, 90, 'tank')
-          e.atk = def.meleeCd
+        if (d < e.r + pr + 7 && e.atk <= 0 && !ridingFast && !e.wind) {
+          const windup = this.diff.meleeWindup ?? (this.difficulty === 'easy' ? 0.5 : 0)
+          if (windup > 0) {
+            e.wind = { type: 'punch', t: windup }
+            e.pulse = 0.4
+            e.flash = 0.15
+          } else {
+            this.hurtPlayer(def.melee, e.x, e.y, 90, 'tank')
+            e.atk = def.meleeCd * this.diff.attack
+          }
         }
       }
       return
@@ -2903,12 +2965,12 @@ onVictory: (stats) => {
     if (!this.flags.boarded || p.x < ZC_END + 250 || this.inArena(p.x, p.y) || !p.alive) return
     this.hordeT -= dt
     if (this.hordeT > 0) return
-    this.hordeT = (CONFIG.horde.interval + rnd(-4, 6)) * (this.buggy.riding ? 0.8 : 1)
+    this.hordeT = ((this.diff.hordeInterval ?? CONFIG.horde.interval) + rnd(-4, 6)) * (this.buggy.riding ? 0.8 : 1)
     let live = 0
     for (const e of this.enemies) if (e.roam && e.state === 'chase') live++
     if (live >= CONFIG.horde.cap) return
     const progress = clamp((p.x - ZC_END) / (ARENA.x - ZC_END), 0, 1)
-    const n = Math.round((4 + progress * 6 + rnd(0, 3)) * CONFIG.horde.size)
+    const n = Math.max(2, Math.round((4 + progress * 6 + rnd(0, 3)) * CONFIG.horde.size * this.diff.spawn))
     const a0 = rnd(0, 6.283)
     const dist = rnd(850, 1100)
     const cx = clamp(p.x + Math.cos(a0) * dist, WORLD.x0 + 200, ARENA.x - 300)
@@ -3413,11 +3475,22 @@ onVictory: (stats) => {
       if (e.wind) {
         e.wind.t -= dt
         e.mv = lerp(e.mv, 0, 0.3)
-        if (e.wind.t <= 0) {
-          const a = want + rnd(-0.07, 0.07)
-          this.spawnEProj(e.x + Math.cos(a) * e.r * 1.5, e.y + Math.sin(a) * e.r * 1.5, a, 310, 10, 'acid', 0x9dff3a, 6)
-          sfx.shoot([420, 150], 0.04)
-          e.wind = null
+        if (e.wind.type === 'spit') {
+          if (e.wind.t <= 0) {
+            const a = want + rnd(-0.07, 0.07)
+            this.spawnEProj(e.x + Math.cos(a) * e.r * 1.5, e.y + Math.sin(a) * e.r * 1.5, a, 310, 10, 'acid', 0x9dff3a, 6)
+            sfx.shoot([420, 150], 0.04)
+            e.wind = null
+          }
+        } else if (e.wind.type === 'melee') {
+          e.pulse = 0.25
+          if (e.wind.t <= 0) {
+            e.wind = null
+            if (d < e.r + pr + 12 && !ridingFast) {
+              this.hurtPlayer(def.melee, e.x, e.y, 40, 'acid')
+            }
+            e.atk = def.meleeCd * this.diff.attack
+          }
         }
       } else {
         if (d > 380 || !los) this.steer(e, ux, uy, spd, dt, d)
@@ -3427,13 +3500,21 @@ onVictory: (stats) => {
           if (Math.random() < dt * 0.5) e.strafe *= -1
         }
         if (los && d < 620 && e.cd <= 0) {
-          e.wind = { type: 'spit', t: 0.35 }
-          e.cd = (1.7 + rnd(0, 0.7)) * this.diff.attack
+          const prepT = this.difficulty === 'easy' ? 0.6 : 0.35
+          e.wind = { type: 'spit', t: prepT }
+          const baseCd = this.difficulty === 'easy' ? 3.0 + rnd(0, 1.0) : 1.7 + rnd(0, 0.7)
+          e.cd = baseCd * this.diff.attack
         }
       }
-      if (d < e.r + pr + 8 && e.atk <= 0 && !ridingFast) {
-        this.hurtPlayer(def.melee, e.x, e.y, 40, 'acid')
-        e.atk = def.meleeCd
+      if (d < e.r + pr + 8 && e.atk <= 0 && !ridingFast && !e.wind) {
+        const windup = this.diff.meleeWindup ?? (this.difficulty === 'easy' ? 0.5 : 0)
+        if (windup > 0) {
+          e.wind = { type: 'melee', t: windup }
+          e.pulse = 0.3
+        } else {
+          this.hurtPlayer(def.melee, e.x, e.y, 40, 'acid')
+          e.atk = def.meleeCd * this.diff.attack
+        }
       }
       return true
     }
@@ -3460,7 +3541,8 @@ onVictory: (stats) => {
       if (d > e.r + pr + 46) this.steer(e, sx / sl, sy / sl, def.speed * e.speedMul, dt, d)
       else e.mv = lerp(e.mv, 0, 0.3)
       if (d < 84 + pr && e.atk <= 0) {
-        e.wind = { type: 'lick', t: 0.45 }
+        const prepT = this.difficulty === 'easy' ? 0.65 : 0.45
+        e.wind = { type: 'lick', t: prepT }
         e.cdir = want
         e.atk = def.meleeCd * rnd(0.9, 1.2) * this.diff.attack
       }
@@ -3469,12 +3551,33 @@ onVictory: (stats) => {
 
     if (e.kind === 'rock') {
       const armored = e.armor > 0
+      if (e.wind) {
+        e.wind.t -= dt
+        e.mv = lerp(e.mv, 0, 0.3)
+        e.face += angDiff(e.face, want) * Math.min(1, dt * 6)
+        e.pulse = 0.35
+        if (e.wind.t <= 0) {
+          e.wind = null
+          if (d < e.r + pr + 12 && !ridingFast) {
+            this.hurtPlayer(armored ? def.melee : 6, e.x, e.y, armored ? 80 : 40, 'rock')
+          }
+          e.atk = def.meleeCd * this.diff.attack
+        }
+        return true
+      }
       e.face += angDiff(e.face, want) * Math.min(1, dt * 5)
       if (d > e.r + pr + 3) this.steer(e, ux, uy, def.speed * (armored ? 1 : 1.7) * e.speedMul, dt, d)
       else e.mv = lerp(e.mv, 0, 0.3)
       if (d < e.r + pr + 9 && e.atk <= 0 && !ridingFast) {
-        this.hurtPlayer(armored ? def.melee : 6, e.x, e.y, armored ? 80 : 40, 'rock')
-        e.atk = def.meleeCd
+        const windup = this.diff.meleeWindup ?? (this.difficulty === 'easy' ? 0.5 : 0)
+        if (windup > 0) {
+          e.wind = { type: 'melee', t: windup }
+          e.pulse = 0.4
+          e.flash = 0.15
+        } else {
+          this.hurtPlayer(armored ? def.melee : 6, e.x, e.y, armored ? 80 : 40, 'rock')
+          e.atk = def.meleeCd * this.diff.attack
+        }
       }
       return true
     }
