@@ -20,3 +20,4 @@ with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED, compressle
             print(f'  + {rel}')
 
 print(f'\nListo: {zip_path} creado con rutas estandar (forward slash).')
+
