@@ -1,95 +1,105 @@
-# game-3d starter (three.js + Rapier)
+# VARADO: A LEGO Sci-Fi Survival Adventure 🚀🪐
 
-A complete, small 3D game — **Sky Cores**: run, jump and dash across floating islands to collect
-every energy core before the clock runs out, avoiding patrol drones. It exists to be *changed*:
-the engine layer is fixed scaffolding, the game layer is the part you rewrite.
+![VARADO Cover](cover.png)
 
-```bash
-pnpm install
-pnpm dev      # http://localhost:5173
-pnpm build    # typecheck + production build + JS/font budgets + total-size report
-pnpm test     # unit tests (rules, save, i18n, level)
-pnpm smoke    # after build: headless browser playthrough + screenshots in shots/
-```
+> **Un astronauta solitario, un planeta hostil y una horda de criaturas parasitarias que no descansarán hasta cazarte.**
 
-## Layout
+**VARADO** es un videojuego de acción, supervivencia y disparos en tercera persona (3D) para navegadores web (HTML5), que combina la estética nostálgica y detallada de figuras y bloques de construcción estilo LEGO® con la adrenalina y tensión del horror y la supervivencia espacial.
 
-| Path | Role | Change it? |
-| --- | --- | --- |
-| `src/engine/loop.ts` | Fixed 60 Hz simulation + interpolated rendering | Rarely |
-| `src/engine/input.ts` | Keyboard/mouse, gamepad, touch → one action state | Add actions here |
-| `src/engine/physics.ts` | Rapier world, collider helpers, render interpolation | Rarely |
-| `src/engine/renderer.ts` | WebGL renderer, quality presets, bloom | Rarely |
-| `src/engine/audio.ts` | Music/SFX buses, synthesized SFX, `load()` for files | Add sounds |
-| `src/engine/save.ts` | Versioned localStorage save + leaderboard | Add fields + parsing |
-| `src/engine/i18n.ts` | en / zh-CN, browser detection, saved choice wins | Rarely |
-| `src/engine/assets.ts` | Cached GLTF/texture loading with progress | Use it for models |
-| `src/game/config.ts` | Source defaults and active gameplay configuration | Yes |
-| `src/game/tuning.ts` | Tweak catalog, atomic validation and activation boundaries | Yes |
-| `src/game/rules.ts` | Pure score/lives/clock/win rules (unit tested) | Yes |
-| `src/game/world.ts` | Level layout, sky, lights, islands, stones, lifts | Yes |
-| `src/game/player.ts` | Character controller + game feel + procedural model | Yes |
-| `src/game/*.ts` | Camera, cores, drones, particles, scene orchestration | Yes |
-| `src/ui/`, `src/styles/main.css` | HTML/CSS title, HUD, pause, settings, results | Yes |
-| `src/i18n/*.json` | All player-facing text (both files, same keys) | Yes |
+---
 
-## Rules for changes
+## 📖 Sinopsis
 
-- **Simulation in `step()`, visuals in `render()`/`animate()`.** Gameplay state only changes in
-  fixed steps; read presses there with `input.consume(action)`, never `pressed()`.
-- **Rules stay pure.** Scoring, win/lose and progression go in `rules.ts` with tests; scene code
-  reports events and reads state.
-- **Every visible string is an i18n key** in both `en.json` and `zh-CN.json` (a test enforces
-  matching keys and placeholders). English and Chinese use the bundled Manus CC0 fonts in `public/fonts/`;
-  if you add new Chinese text, check it renders (missing glyphs fall back to system fonts).
-- **UI is HTML/CSS**, not canvas. Keep the game look: display font, outlined text, hard offset
-  shadows, skewed buttons, notched panels. Menus must stay keyboard/gamepad navigable
-  (`data-nav` on focusable controls).
-- **Colliders come from the helpers** in `physics.ts` with the same sizes as the meshes.
-- Keep `npm run build` within the JS/font budgets (`scripts/check-size.mjs`) and `npm run smoke` green.
-  Total game asset size is reported without a hard limit.
+Tras una catastrófica colisión orbital, tu nave de exploración queda completamente destruida en la superficie de un mundo desconocido. Atrapado sin comunicación con el comando espacial, deberás equiparte con lo que quede en las ruinas de tu base, enfrentarte a misteriosas formas de vida alienígenas, dominar la conducción de un buggy todoterreno y buscar los componentes y piedras de ignición necesarios para activar el cohete de escape antes de que la infestación devore lo poco que queda.
 
-## Controls
+---
 
-Keyboard/mouse: WASD move, mouse look (click to capture), Space jump (hold = higher), Shift
-sprint, F or left click dash, Esc pause. Gamepad: left stick, right stick, A jump, X/RB dash,
-LB sprint, Start pause. Touch: left-side stick, right-side drag to look, JUMP / DASH buttons.
+## ✨ ¿Qué lo hace especial?
 
-## Credits
+* **Contraste estético único**: Fusión visual entre el carisma plástico de las minifiguras y bloques LEGO® y la atmósfera densa y oscura de una pesadilla alienígena espacial.
+* **Transición fluida a pie y en vehículo**: Conduce un buggy todoterreno modular con físicas reactivas, embiste y arrolla enemigos, o salta del vehículo en pleno movimiento para entablar combate a pie.
+* **Animaciones y posturas auténticas de minifigura**: Sistema dinámico de posturas donde el personaje maneja armas a una mano (pistola) o dos manos (rifles/escopeta) respetando la proporción anatómica de las articulaciones de juguete y rotación suave tipo brújula.
+* **Cero descargas y acceso instantáneo**: Desarrollado íntegramente sobre tecnologías web modernas para ejecutarse directo en el navegador a 60 FPS estables sin tiempos de carga molestos ni dependencias de instalación.
 
-Fonts: ManusCC0 (regular, medium, bold) and ManusCC0 Sans CJK SC — CC0 1.0.
-The bundled Chinese font preserves its 6,547-codepoint repertoire; no font download is required.
-See `public/fonts/ManusCC0-LICENSE.txt`.
-Libraries: three.js (MIT), Rapier (Apache-2.0).
+---
 
-## Preview Tweak
+## 🎮 Modos de juego y dificultad
 
-`src/game/tuning.ts` is this game's parameter manager. The Addon panel reads its
-catalog; `config.ts` owns source defaults and the active configuration used by gameplay.
-When adapting the game, keep only controls with actual gameplay consumers, and preserve
-stable IDs for unchanged parameters. Define ranges, units and the correct activation
-boundary. Register through `scripts/manus-tuning/adapter.js` only under `import.meta.env.DEV`.
-Keep the Vite plugin and `scripts/__manus__/` helpers intact; production builds exclude
-the browser adapter and never inject the bridge.
+El juego cuenta con una campaña continua dividida en dos planetas con entornos, puzzles y jefes propios:
+1. **Planeta Varado**: Base inicial, pasillo de combate contra el impostor, garage vehicular, mundo abierto desértico, campamentos alienígenas y el temible **Jefe Impostor**.
+2. **Planeta Bershna**: Un planeta rocoso hostil donde recolectarás 8 piedras de ignición, escalarás una torre de control espiral y enfrentarás al colosal **Coloso de Roca**.
 
-Apply changes preview state only. `LIVE` parameters are read in the next game update;
-`NEXT_ACTION` parameters activate at the relevant jump/dash start; `NEXT_RUN` parameters
-activate in `Game.start`. Model/collider size and gravity are not exposed by this version.
-Do not mutate the source defaults or persist Apply to localStorage. Save with Manus
-checks the snapshot against the current catalog and edits `DEFAULT_CONFIG`, then uses
-the normal Three.js Web build/checkpoint workflow. Keep existing gameplay parameter
-managers when extending an older project; do not create a competing store.
+### Selector de dificultad equilibrado:
+* 🟢 **Fácil**: *"Una travesía tranquila para explorar el planeta y dominar los controles sin agobios."* (Enemigos un 20% más lentos, daño recibido reducido un 20%, ataques cuerpo a cuerpo telegrafiados con 0.5s de preparación visual, hordas espaciadas y mayor tasa de munición/salud).
+* 🟡 **Moderado**: *"El desafío original: supervivencia táctica, reflejos y adrenalina en equilibrio."*
+* 🔴 **Difícil**: *"Peligro constante. Recursos escasos y enemigos hostiles que no perdonan errores."*
+* 🟣 **INFESTACIÓN**: *"Mucha suerte."* (Aparición masiva de enemigos agresivos y rápidos, drops mínimos y letalidad máxima).
 
-For server-authoritative multiplayer, expose local cosmetic controls only until gameplay
-parameters have explicit server-side development support. The descriptor's GAMEPLAY flag
-is a classification, not server authorization or ranked-score enforcement.
+---
 
-The preview plugin reads the ignored `.manus-webdev/preview-identity.json` v1 projection
-written by the Runtime when initializing, attaching or restoring this project. It contains
-only the resource ID and canonical project directory; private Host bindings and starter
-receipts are not template dependencies. Missing identity disables the bridge.
-The manager latches `tuning.unranked` when non-default GAMEPLAY values become active and
-resets it only at the next run using that run's active values. `Game` snapshots this onto
-`RunState.unranked`; local results cannot save such runs. Preserve this guard when changing
-scoring. When adding online leaderboards, skip submissions for unranked runs and enforce
-eligibility in the authoritative server too; client flags are not proof of a fair score.
+## ⚙️ Mecánicas de juego
+
+* **Arsenal diverso y especializado**:
+  * 🔫 **Pistola láser**: Munición infinita, disparo rápido y gran confiabilidad para enemigos ligeros.
+  * 💥 **Rifle de asalto**: Ráfagas automáticas continuas de energía cian a media y larga distancia.
+  * 🛑 **Escopeta**: Alta dispersión de perdigones y contundencia demoledora a corta distancia.
+  * 🎯 **Rifle de francotirador**: Rayo *hitscan* instantáneo de daño crítico con mira telescópica (`Zoom con Click Derecho o Z`).
+* **Granadas de plasma (`G`)**: Detonación rápida de 1 segundo capaz de arrasar grupos de alienígenas o causar gran impacto a los jefes.
+* **Movilidad táctica**: Sistema de estamina, carrera rápida (`Shift`) y esquive con impulso/dash (`C` / `Espacio`).
+* **Vehículo todoterreno (Buggy)**: Sistema de conducción con físicas de aceleración, derrape y módulos de mejora desbloqueables en el mapa (picos delanteros, llantas de arena, motor turbo y blindaje reforzado).
+* **Coleccionables y Perks LEGO**: 14 piezas coleccionables ocultas que otorgan mejoras permanentes a la resistencia física, sprint sin costo de estamina y munición infinita.
+* **Puntos de control inteligentes**: Sistema de guardado y reaparición en edificios con puzzles y campamentos seguros.
+
+---
+
+## 🏆 Características principales
+
+* **35 Logros integrados**: Retos divertidos con barra de progreso verde interactiva (`0/n`) para medir tus hazañas.
+* **Personalización de Minifigura**: Menú de aspectos/skins seleccionables para el traje del astronauta.
+* **Configuración completa**: Ajuste en tiempo real de volumen general, efectos, armas, buggy, música ambiental, sensibilidad del ratón y selector instantáneo de calidad gráfica (Automática, Baja, Media, Alta).
+
+---
+
+## 🕹️ Controles
+
+| Acción | Teclado / Ratón |
+| :--- | :--- |
+| **Moverse / Conducir** | `W, A, S, D` o `Teclas de Dirección` |
+| **Mirar / Apuntar** | `Movimiento del Mouse` |
+| **Disparar** | `Click Izquierdo` / `Barra Espaciadora` |
+| **Zoom de francotirador** | `Click Derecho` / `Z` |
+| **Correr (Sprint)** | `Shift Izquierdo` (mantener) |
+| **Esquivar / Dash** | `C` (o `Espacio` en movimiento a pie) |
+| **Interactuar / Subir o Bajar del Buggy** | `E` |
+| **Lanzar Granada de Plasma** | `G` |
+| **Seleccionar Arma** | `1`, `2`, `3`, `4` o `Rueda del Ratón` |
+| **Pausa y Configuración** | `ESC` o `P` |
+
+---
+
+## 🛠️ Motor y Tecnologías Usadas
+
+* **Motor Gráfico**: [Three.js](https://threejs.org/) (WebGL 2, renderizado procedural, shaders optimizados, iluminación dinámica y proyección de sombras en tiempo real).
+* **Lenguaje**: [TypeScript](https://www.typescriptlang.org/) (código fuertemente tipado para lógica de combate, IA y físicas).
+* **Entorno de desarrollo y empaquetado**: [Vite](https://vitejs.dev/) (compilación ultrarrápida en módulos ESM).
+* **Audio**: Web Audio API nativa con sintetizadores procedurales para efectos sonoros (láseres, motores, rugidos, pasos) y música ambiental responsiva.
+* **Modelos 3D**: Modelado híbrido procedural en Three.js combinado con mallas GLTF optimizadas (generadas y ajustadas para estética LEGO).
+* **Pruebas y Verificación**: [Playwright](https://playwright.dev/) para pruebas automáticas de humo (smoke tests) extremo a extremo.
+
+---
+
+## 🔗 Repositorio Oficial en GitHub
+
+El código fuente, desarrollo y actualizaciones del proyecto se encuentran alojados en:
+👉 **[https://github.com/esech1n0/Varado](https://github.com/esech1n0/Varado)**
+
+---
+
+## ❤️ Agradecimientos
+
+Un agradecimiento especial a:
+* A todos los jugadores y testers por su retroalimentación para perfeccionar el balance, la jugabilidad y la atmósfera de esta aventura.
+* A la comunidad de código abierto por el soporte y desarrollo constante en librerías como Three.js y Vite.
+* A todas las personas que disfrutan de la ciencia ficción, la nostalgia de los juguetes de bloques y los desafíos de supervivencia.
+
+¡Gracias por jugar a **VARADO** y que tengas un buen viaje de vuelta a las estrellas! 🌟
